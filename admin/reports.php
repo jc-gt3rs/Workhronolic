@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/demo_data.php';
 
-require_admin();
+require_manager();
 
 // Month selector (validated: YYYY-MM only, never trusted raw).
 $month = clean_text($_GET['month'] ?? date('Y-m'));

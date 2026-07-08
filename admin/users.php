@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/demo_data.php';
 
-require_admin();
+require_owner(); // managing people is owner-only
 
 $errors = [];
 $notice = '';
@@ -15,16 +15,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = $_POST['action'] ?? '';
         $id     = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
 
-        if ($action === 'toggle' && $id) {
-            // BACKEND TODO: UPDATE users SET active = NOT active WHERE id = ? AND id != {current admin}
-            $notice = 'Account status updated.';
+        if ($action === 'promote' && $id) {
+            // BACKEND TODO: UPDATE users SET role = 'manager'
+            // WHERE id = ? AND company_id = ? AND role = 'employee' AND status = 'active'
+            $notice = 'Promoted to manager.';
+        } elseif ($action === 'demote' && $id) {
+            // BACKEND TODO: UPDATE users SET role = 'employee'
+            // WHERE id = ? AND company_id = ? AND role = 'manager'
+            $notice = 'Changed to employee.';
+        } elseif ($action === 'remove' && $id) {
+            // BACKEND TODO: soft-delete / deactivate the account
+            // (never the owner's own account) within this company only.
+            $notice = 'Account removed from the company.';
         } elseif ($action === 'expected' && $id) {
             $hours = filter_var($_POST['expected_hours'] ?? null, FILTER_VALIDATE_INT,
                 ['options' => ['min_range' => 0, 'max_range' => 300]]);
             if ($hours === false || $hours === null) {
                 $errors[] = 'Expected hours must be a whole number between 0 and 300.';
             } else {
-                // BACKEND TODO: UPDATE users SET expected_hours = ? WHERE id = ?
+                // BACKEND TODO: UPDATE users SET expected_hours = ? WHERE id = ? AND company_id = ?
                 $notice = 'Expected monthly hours updated.';
             }
         } else {
@@ -39,7 +48,11 @@ require __DIR__ . '/../includes/header.php';
 ?>
 
 <h1 class="text-2xl font-normal">People</h1>
-<p class="mt-1 text-sm text-ggray">Manage team accounts and each worker's agreed monthly hours.</p>
+<p class="mt-1 text-sm text-ggray">
+  Manage roles and agreed monthly hours for everyone in <?= e($DEMO_COMPANY['name']) ?>.
+  New people join with your company code — accept them on the
+  <a href="timesheets.php" class="font-medium text-gblue hover:underline">Approvals</a> page.
+</p>
 
 <?php if ($notice): ?>
   <div class="mt-6 rounded-lg bg-ggreen-tint px-4 py-3 text-sm text-ggreen" role="status"><?= e($notice) ?></div>
@@ -51,7 +64,7 @@ require __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <div class="mt-6 overflow-x-auto rounded-2xl border border-gline bg-white">
-  <table class="w-full min-w-[760px] text-left text-sm">
+  <table class="w-full min-w-[820px] text-left text-sm">
     <thead>
       <tr class="border-b border-gline text-xs font-medium uppercase tracking-wide text-ggray">
         <th class="px-6 py-3">Name</th>
@@ -67,12 +80,15 @@ require __DIR__ . '/../includes/header.php';
       <tr class="border-b border-gline last:border-0 hover:bg-gbg">
         <td class="px-6 py-4 font-medium whitespace-nowrap"><?= e($u['name']) ?></td>
         <td class="px-6 py-4 text-ggray"><?= e($u['email']) ?></td>
+        <td class="px-6 py-4"><?php
+          $role_badge = [
+            'owner'    => 'bg-gblue text-white',
+            'manager'  => 'bg-gblue-tint text-gblue',
+            'employee' => 'bg-gbg text-ggray',
+          ];
+        ?><span class="rounded-full px-2.5 py-1 text-xs font-medium <?= $role_badge[$u['role']] ?? '' ?>"><?= e(ucfirst($u['role'])) ?></span></td>
         <td class="px-6 py-4">
-          <span class="rounded-full px-2.5 py-1 text-xs font-medium <?= $u['role'] === 'admin'
-              ? 'bg-gblue-tint text-gblue' : 'bg-gbg text-ggray' ?>"><?= e(ucfirst($u['role'])) ?></span>
-        </td>
-        <td class="px-6 py-4">
-          <?php if ($u['role'] === 'worker'): ?>
+          <?php if ($u['role'] !== 'owner'): ?>
           <form method="post" action="users.php" class="flex items-center gap-2">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="expected">
@@ -88,20 +104,32 @@ require __DIR__ . '/../includes/header.php';
           <?php endif; ?>
         </td>
         <td class="px-6 py-4">
-          <span class="rounded-full px-2.5 py-1 text-xs font-medium <?= $u['active']
-              ? 'bg-ggreen-tint text-ggreen' : 'bg-gred-tint text-gred' ?>"><?= $u['active'] ? 'Active' : 'Deactivated' ?></span>
+          <span class="rounded-full px-2.5 py-1 text-xs font-medium <?= $u['status'] === 'active'
+              ? 'bg-ggreen-tint text-ggreen' : 'bg-gyellow-tint text-gyellow' ?>"><?= $u['status'] === 'active' ? 'Active' : 'Pending approval' ?></span>
         </td>
         <td class="px-6 py-4 whitespace-nowrap">
-          <?php if ($u['role'] === 'worker'): ?>
-          <form method="post" action="users.php" class="inline"
-                data-confirm="<?= $u['active'] ? 'Deactivate' : 'Reactivate' ?> <?= e($u['name']) ?>?">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="toggle">
-            <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
-            <button type="submit" class="text-sm font-medium <?= $u['active'] ? 'text-gred' : 'text-ggreen' ?> hover:underline">
-              <?= $u['active'] ? 'Deactivate' : 'Reactivate' ?>
-            </button>
-          </form>
+          <?php if ($u['role'] === 'employee' && $u['status'] === 'active'): ?>
+            <form method="post" action="users.php" class="inline" data-confirm="Promote <?= e($u['name']) ?> to manager?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="promote">
+              <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+              <button type="submit" class="text-sm font-medium text-gblue hover:underline">Promote to manager</button>
+            </form>
+          <?php elseif ($u['role'] === 'manager'): ?>
+            <form method="post" action="users.php" class="inline" data-confirm="Change <?= e($u['name']) ?> to employee?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="demote">
+              <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+              <button type="submit" class="text-sm font-medium text-ggray hover:underline">Change to employee</button>
+            </form>
+          <?php endif; ?>
+          <?php if ($u['role'] !== 'owner'): ?>
+            <form method="post" action="users.php" class="inline" data-confirm="Remove <?= e($u['name']) ?> from the company?">
+              <?= csrf_field() ?>
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+              <button type="submit" class="ml-3 text-sm font-medium text-gred hover:underline">Remove</button>
+            </form>
           <?php endif; ?>
         </td>
       </tr>

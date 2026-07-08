@@ -2,8 +2,29 @@
 /**
  * DEMO DATA — placeholder rows so the frontend renders meaningfully.
  * BACKEND TODO: delete this file and replace every usage with prepared
- * mysqli/PDO queries against the real tables.
+ * mysqli/PDO queries against the real tables. Every query must be scoped
+ * to the logged-in user's company_id.
  */
+
+$DEMO_COMPANY = [
+    'id'   => 1,
+    'name' => 'Aa Startup Studio',
+    'code' => 'AA-7K2M9Q', // unique shareable join code, generated at creation
+];
+
+// status: 'active' = normal account; 'pending' = join request awaiting approval.
+$DEMO_USERS = [
+    ['id' => 1, 'name' => 'Dathan Ancheta',  'email' => 'dathan@startup.io', 'role' => 'owner',    'status' => 'active',  'expected_hours' => 0,  'company_id' => 1],
+    ['id' => 2, 'name' => 'Mia Santos',      'email' => 'mia@startup.io',    'role' => 'manager',  'status' => 'active',  'expected_hours' => 80, 'company_id' => 1],
+    ['id' => 3, 'name' => 'John Cris Antor', 'email' => 'jc@startup.io',     'role' => 'employee', 'status' => 'active',  'expected_hours' => 60, 'company_id' => 1],
+    ['id' => 4, 'name' => 'Paolo Reyes',     'email' => 'paolo@startup.io',  'role' => 'employee', 'status' => 'pending', 'expected_hours' => 40, 'company_id' => 1],
+];
+
+// Company join requests awaiting review (managers and owners approve these).
+$DEMO_JOIN_REQUESTS = [
+    ['id' => 11, 'name' => 'Paolo Reyes', 'email' => 'paolo@startup.io', 'role' => 'employee', 'requested' => '2026-07-07'],
+    ['id' => 12, 'name' => 'Lea Villanueva', 'email' => 'lea@freelance.ph', 'role' => 'manager', 'requested' => '2026-07-08'],
+];
 
 $DEMO_ENTRIES = [
     ['id' => 5, 'date' => '2026-07-08', 'start' => '09:00', 'end' => null,    'hours' => null, 'status' => 'active',
@@ -18,13 +39,6 @@ $DEMO_ENTRIES = [
      'note' => 'Reviewed pull requests and updated the deployment documentation.'],
 ];
 
-$DEMO_USERS = [
-    ['id' => 1, 'name' => 'Dathan Ancheta',  'email' => 'dathan@startup.io', 'role' => 'admin',  'expected_hours' => 0,  'active' => true],
-    ['id' => 2, 'name' => 'John Cris Antor', 'email' => 'jc@startup.io',     'role' => 'worker', 'expected_hours' => 60, 'active' => true],
-    ['id' => 3, 'name' => 'Mia Santos',      'email' => 'mia@startup.io',    'role' => 'worker', 'expected_hours' => 80, 'active' => true],
-    ['id' => 4, 'name' => 'Paolo Reyes',     'email' => 'paolo@startup.io',  'role' => 'worker', 'expected_hours' => 40, 'active' => false],
-];
-
 $DEMO_PENDING = [
     ['id' => 4, 'worker' => 'John Cris Antor', 'date' => '2026-07-07', 'start' => '13:00', 'end' => '17:30', 'hours' => 4.5,
      'note' => 'Finished the pricing page revisions and pushed the responsive fixes for mobile breakpoints.'],
@@ -35,7 +49,7 @@ $DEMO_PENDING = [
 ];
 
 $DEMO_REPORT = [
-    ['worker' => 'John Cris Antor', 'expected' => 60, 'verified' => 52.5, 'pending' => 4.5, 'entries' => 14],
     ['worker' => 'Mia Santos',      'expected' => 80, 'verified' => 78.0, 'pending' => 9.0, 'entries' => 21],
+    ['worker' => 'John Cris Antor', 'expected' => 60, 'verified' => 52.5, 'pending' => 4.5, 'entries' => 14],
     ['worker' => 'Paolo Reyes',     'expected' => 40, 'verified' => 12.0, 'pending' => 0.0, 'entries' => 4],
 ];

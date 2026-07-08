@@ -61,6 +61,34 @@ function valid_password(?string $value): bool
         && preg_match('/\d/', $value);
 }
 
+/** Validate a company name. */
+function valid_company_name(?string $value): bool
+{
+    $len = mb_strlen(clean_text($value));
+    return $len >= 2 && $len <= 60;
+}
+
+/** Validate a company join code (format: XX-XXXXXX). */
+function valid_company_code(?string $value): bool
+{
+    return (bool) preg_match('/^[A-Z]{2}-[A-Z0-9]{6}$/', strtoupper(clean_text($value)));
+}
+
+/**
+ * Generate a unique, shareable company code from the company name.
+ * BACKEND TODO: retry on collision (UNIQUE index on companies.code).
+ */
+function generate_company_code(string $company_name): string
+{
+    $prefix = strtoupper(preg_replace('/[^a-z]/i', '', $company_name) . 'XX');
+    $alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // no 0/O/1/I/L lookalikes
+    $suffix = '';
+    for ($i = 0; $i < 6; $i++) {
+        $suffix .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+    }
+    return substr($prefix, 0, 2) . '-' . $suffix;
+}
+
 // ---------------------------------------------------------------------------
 // CSRF protection
 // ---------------------------------------------------------------------------

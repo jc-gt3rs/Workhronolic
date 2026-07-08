@@ -3,10 +3,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/demo_data.php';
 
-require_login();
-if (is_admin()) {
-    redirect('admin/timesheets.php');
-}
+require_login(); // owners and managers keep personal timesheets too
 
 $errors = [];
 $notice = '';

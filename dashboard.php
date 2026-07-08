@@ -3,10 +3,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/demo_data.php';
 
-require_login();
-if (is_admin()) {
-    redirect('admin/dashboard.php');
-}
+require_login(); // owners and managers log time too — no role redirect here
 
 $user    = current_user();
 $errors  = [];
@@ -15,6 +12,10 @@ $notice  = '';
 // DEMO: active shift lives in the session. BACKEND TODO: read/write the
 // open time_entries row (end_time IS NULL) for this user instead.
 $active_since = $_SESSION['demo_clock_in'] ?? null;
+// Break state: timestamp of the running break (null = not on break) and
+// accumulated seconds from earlier breaks in this shift.
+$break_since = $_SESSION['demo_break_start'] ?? null;
+$break_total = $_SESSION['demo_break_total'] ?? 0;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) {
@@ -25,20 +26,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             // BACKEND TODO: INSERT INTO time_entries (user_id, work_date, start_time) VALUES (?, ?, ?)
             $_SESSION['demo_clock_in'] = time();
+            $_SESSION['demo_break_total'] = 0;
             $active_since = $_SESSION['demo_clock_in'];
+            $break_total  = 0;
             $notice = 'Clocked in. Your timer is running.';
+        }
+    } elseif (($_POST['action'] ?? '') === 'break_start') {
+        if (!$active_since) {
+            $errors[] = 'You are not clocked in.';
+        } elseif ($break_since) {
+            $errors[] = 'You are already on a break.';
+        } else {
+            // BACKEND TODO: INSERT INTO entry_breaks (entry_id, break_start) VALUES (?, ?)
+            $_SESSION['demo_break_start'] = time();
+            $break_since = $_SESSION['demo_break_start'];
+            $notice = 'Break started. Your timer is paused.';
+        }
+    } elseif (($_POST['action'] ?? '') === 'break_end') {
+        if (!$break_since) {
+            $errors[] = 'You are not on a break.';
+        } else {
+            // BACKEND TODO: UPDATE entry_breaks SET break_end = ? WHERE entry_id = ? AND break_end IS NULL
+            $break_total += time() - $break_since;
+            $_SESSION['demo_break_total'] = $break_total;
+            unset($_SESSION['demo_break_start']);
+            $break_since = null;
+            $notice = 'Break ended. Your timer is running again.';
         }
     } elseif (($_POST['action'] ?? '') === 'clock_out') {
         $note = clean_text($_POST['note'] ?? '');
         if (!$active_since) {
             $errors[] = 'You are not clocked in.';
+        } elseif ($break_since) {
+            $errors[] = 'End your break before clocking out.';
         } elseif (!valid_justification($note)) {
             $errors[] = 'Describe what you accomplished (at least 30 characters) before clocking out.';
         } else {
-            // BACKEND TODO: UPDATE time_entries SET end_time = ?, note = ?, status = 'pending'
-            // WHERE id = ? AND user_id = ? (prepared statement).
-            unset($_SESSION['demo_clock_in']);
+            // BACKEND TODO: UPDATE time_entries SET end_time = ?, note = ?, break_seconds = ?, status = 'pending'
+            // WHERE id = ? AND user_id = ? (prepared statement). Worked hours = (end - start - break_seconds).
+            unset($_SESSION['demo_clock_in'], $_SESSION['demo_break_start'], $_SESSION['demo_break_total']);
             $active_since = null;
+            $break_since  = null;
+            $break_total  = 0;
             $notice = 'Clocked out. Your entry was submitted for review.';
         }
     }
@@ -70,28 +99,60 @@ require __DIR__ . '/includes/header.php';
   <section class="lg:col-span-2 rounded-2xl border border-gline bg-white p-8" aria-labelledby="clock-heading">
     <?php if ($active_since): ?>
       <div class="flex items-center gap-2">
-        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-ggreen" aria-hidden="true"></span>
-        <h2 id="clock-heading" class="text-sm font-medium text-ggreen">Clocked in since <?= e(date('g:i A', $active_since)) ?></h2>
+        <?php if ($break_since): ?>
+          <span class="h-2.5 w-2.5 rounded-full bg-gyellow" aria-hidden="true"></span>
+          <h2 id="clock-heading" class="text-sm font-medium text-gyellow">On break since <?= e(date('g:i A', $break_since)) ?> — timer paused</h2>
+        <?php else: ?>
+          <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-ggreen" aria-hidden="true"></span>
+          <h2 id="clock-heading" class="text-sm font-medium text-ggreen">Clocked in since <?= e(date('g:i A', $active_since)) ?></h2>
+        <?php endif; ?>
       </div>
 
       <p id="live-timer" data-start="<?= (int) $active_since ?>"
-         class="mt-4 font-mono text-6xl font-medium tabular-nums tracking-tight sm:text-7xl">0:00:00</p>
+         data-break-total="<?= (int) $break_total ?>"
+         <?= $break_since ? 'data-break-start="' . (int) $break_since . '"' : '' ?>
+         class="mt-4 font-mono text-6xl font-medium tabular-nums tracking-tight sm:text-7xl <?= $break_since ? 'text-ggray' : '' ?>">0:00:00</p>
 
-      <form method="post" action="dashboard.php" class="mt-8">
-        <?= csrf_field() ?>
-        <input type="hidden" name="action" value="clock_out">
-        <label class="mb-1.5 block text-sm font-medium" for="note">What did you accomplish?</label>
-        <textarea id="note" name="note" rows="3" required minlength="30"
-                  placeholder="Detail the tasks you completed and the milestones they map to (minimum 30 characters)…"
-                  class="w-full rounded-lg border border-gline px-4 py-2.5 text-sm outline-none focus:border-gblue focus:ring-2 focus:ring-gblue/30"></textarea>
-        <div class="mt-1 flex items-center justify-between">
-          <p class="text-xs text-ggray"><span id="note-count">0</span>/30 characters minimum</p>
+      <p class="mt-2 text-sm text-ggray">
+        Breaks this shift: <span id="break-timer" class="font-mono text-xs"><?= e(format_hours($break_total / 3600)) ?></span>
+        — not counted toward your hours.
+      </p>
+
+      <?php if ($break_since): ?>
+        <form method="post" action="dashboard.php" class="mt-8">
+          <?= csrf_field() ?>
+          <input type="hidden" name="action" value="break_end">
           <button type="submit"
-                  class="rounded-full bg-gred px-6 py-2.5 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-gred/40 focus:ring-offset-2">
-            Clock out
+                  class="rounded-full bg-gblue px-8 py-3 text-sm font-medium text-white hover:bg-gblue-dark focus:outline-none focus:ring-2 focus:ring-gblue/40 focus:ring-offset-2">
+            End break
           </button>
-        </div>
-      </form>
+        </form>
+      <?php else: ?>
+        <form method="post" action="dashboard.php" class="mt-8">
+          <?= csrf_field() ?>
+          <input type="hidden" name="action" value="break_start">
+          <button type="submit"
+                  class="rounded-full border border-gline px-6 py-2.5 text-sm font-medium text-gyellow hover:bg-gyellow-tint focus:outline-none focus:ring-2 focus:ring-gyellow/40 focus:ring-offset-2">
+            Start break
+          </button>
+        </form>
+
+        <form method="post" action="dashboard.php" class="mt-6 border-t border-gline pt-6">
+          <?= csrf_field() ?>
+          <input type="hidden" name="action" value="clock_out">
+          <label class="mb-1.5 block text-sm font-medium" for="note">What did you accomplish?</label>
+          <textarea id="note" name="note" rows="3" required minlength="30"
+                    placeholder="Detail the tasks you completed and the milestones they map to (minimum 30 characters)…"
+                    class="w-full rounded-lg border border-gline px-4 py-2.5 text-sm outline-none focus:border-gblue focus:ring-2 focus:ring-gblue/30"></textarea>
+          <div class="mt-1 flex items-center justify-between">
+            <p class="text-xs text-ggray"><span id="note-count">0</span>/30 characters minimum</p>
+            <button type="submit"
+                    class="rounded-full bg-gred px-6 py-2.5 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-gred/40 focus:ring-offset-2">
+              Clock out
+            </button>
+          </div>
+        </form>
+      <?php endif; ?>
     <?php else: ?>
       <h2 id="clock-heading" class="text-sm font-medium text-ggray">You are off the clock</h2>
       <p id="live-timer" class="mt-4 font-mono text-6xl font-medium tabular-nums tracking-tight text-gline sm:text-7xl">0:00:00</p>

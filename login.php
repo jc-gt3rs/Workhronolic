@@ -4,7 +4,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/demo_data.php';
 
 if (is_logged_in()) {
-    redirect(is_admin() ? 'admin/dashboard.php' : 'dashboard.php');
+    redirect(is_manager() ? 'admin/dashboard.php' : 'dashboard.php');
 }
 
 $errors = [];
@@ -25,24 +25,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            // BACKEND TODO: SELECT id, name, email, role, password_hash FROM users
+            // BACKEND TODO: SELECT id, name, email, role, status, company_id FROM users
             // WHERE email = ? (prepared statement), then password_verify().
             // DEMO: any password signs in a known demo email.
             $found = null;
             foreach ($DEMO_USERS as $u) {
-                if ($u['email'] === $email && $u['active']) { $found = $u; break; }
+                if ($u['email'] === $email) { $found = $u; break; }
             }
-            if ($found) {
+            if ($found && $found['status'] === 'pending') {
+                $errors[] = 'Your join request is still awaiting approval by the company. Try again once it is accepted.';
+            } elseif ($found) {
                 session_regenerate_id(true); // prevent session fixation
                 $_SESSION['user'] = [
-                    'id'    => $found['id'],
-                    'name'  => $found['name'],
-                    'email' => $found['email'],
-                    'role'  => $found['role'],
+                    'id'         => $found['id'],
+                    'name'       => $found['name'],
+                    'email'      => $found['email'],
+                    'role'       => $found['role'],
+                    'company_id' => $found['company_id'],
                 ];
-                redirect($found['role'] === 'admin' ? 'admin/dashboard.php' : 'dashboard.php');
+                redirect(in_array($found['role'], ['owner', 'manager'], true) ? 'admin/dashboard.php' : 'dashboard.php');
+            } else {
+                $errors[] = 'Email or password is incorrect.';
             }
-            $errors[] = 'Email or password is incorrect.';
         }
     }
     $email = $email ?? '';
@@ -79,8 +83,10 @@ require __DIR__ . '/includes/header.php';
              class="mb-2 w-full rounded-lg border border-gline px-4 py-2.5 text-sm outline-none focus:border-gblue focus:ring-2 focus:ring-gblue/30">
 
       <p class="mb-8 text-xs text-ggray">
-        Demo accounts: <span class="font-mono">dathan@startup.io</span> (admin),
-        <span class="font-mono">jc@startup.io</span> (worker) — any password.
+        Demo accounts (any password): <span class="font-mono">dathan@startup.io</span> (owner),
+        <span class="font-mono">mia@startup.io</span> (manager),
+        <span class="font-mono">jc@startup.io</span> (employee),
+        <span class="font-mono">paolo@startup.io</span> (pending approval).
       </p>
 
       <div class="flex items-center justify-between">

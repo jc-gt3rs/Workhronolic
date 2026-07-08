@@ -3,7 +3,7 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/demo_data.php';
 
-require_admin();
+require_manager();
 
 // BACKEND TODO: replace with aggregate queries (COUNT of pending entries,
 // SUM of month hours, active workers, who is clocked in right now).

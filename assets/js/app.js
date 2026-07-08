@@ -1,18 +1,35 @@
 // Workhronolic frontend behavior — no framework, just progressive enhancement.
 
-// Live shift timer on the dashboard.
+// Live shift timer on the dashboard. Break time is excluded from the
+// worked total: while on a break the main timer freezes and the break
+// counter ticks instead.
 (function () {
   const timer = document.getElementById('live-timer');
   if (!timer || !timer.dataset.start) return;
 
+  const breakTimer = document.getElementById('break-timer');
   const startedAt = parseInt(timer.dataset.start, 10) * 1000;
+  const breakTotal = (parseInt(timer.dataset.breakTotal, 10) || 0) * 1000;
+  const breakStart = timer.dataset.breakStart
+    ? parseInt(timer.dataset.breakStart, 10) * 1000
+    : null;
 
-  function tick() {
-    const s = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  function fmt(s) {
     const h = Math.floor(s / 3600);
     const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
     const sec = String(s % 60).padStart(2, '0');
-    timer.textContent = h + ':' + m + ':' + sec;
+    return h + ':' + m + ':' + sec;
+  }
+
+  function tick() {
+    const now = Date.now();
+    const breakMs = breakTotal + (breakStart ? Math.max(0, now - breakStart) : 0);
+    const workedMs = Math.max(0, now - startedAt - breakMs);
+    timer.textContent = fmt(Math.floor(workedMs / 1000));
+    if (breakTimer) {
+      const bs = Math.floor(breakMs / 1000);
+      breakTimer.textContent = Math.floor(bs / 3600) + 'h ' + String(Math.floor((bs % 3600) / 60)).padStart(2, '0') + 'm';
+    }
   }
 
   tick();
@@ -33,6 +50,19 @@
 
   note.addEventListener('input', update);
   update();
+})();
+
+// Copy the company code to the clipboard.
+(function () {
+  const btn = document.getElementById('copy-code');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    navigator.clipboard.writeText(btn.dataset.code).then(function () {
+      const label = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.textContent = label; }, 1500);
+    });
+  });
 })();
 
 // Confirm before any destructive form submit (delete / reject).

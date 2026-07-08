@@ -8,18 +8,30 @@ $user = current_user();
 $self = basename($_SERVER['PHP_SELF']);
 $in_admin = str_contains($_SERVER['PHP_SELF'], '/admin/');
 
-$nav_worker = [
-    ['dashboard.php', 'Dashboard'],
-    ['timesheet.php', 'Timesheet'],
-    ['profile.php',   'Profile'],
-];
-$nav_admin = [
-    ['dashboard.php',  'Overview'],
-    ['timesheets.php', 'Approvals'],
-    ['users.php',      'People'],
-    ['reports.php',    'Reports'],
-];
-$nav = $in_admin ? $nav_admin : $nav_worker;
+// Everyone logs their own time, so every role gets the personal pages.
+// Managers and owners also get the management area; People and Company
+// settings are owner-only.
+if ($in_admin) {
+    $nav = [
+        ['dashboard.php',  'Overview'],
+        ['timesheets.php', 'Approvals'],
+        ['reports.php',    'Reports'],
+    ];
+    if (is_owner()) {
+        $nav[] = ['users.php',   'People'];
+        $nav[] = ['company.php', 'Company'];
+    }
+    $nav[] = ['../dashboard.php', 'My time'];
+} else {
+    $nav = [
+        ['dashboard.php', 'Dashboard'],
+        ['timesheet.php', 'Timesheet'],
+        ['profile.php',   'Profile'],
+    ];
+    if (is_manager()) {
+        $nav[] = ['admin/dashboard.php', 'Manage'];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -71,7 +83,7 @@ tailwind.config = {
       <span class="grid h-8 w-8 place-items-center rounded-full bg-gblue text-sm font-medium text-white">W</span>
       <span class="text-xl tracking-tight text-ggray">Work<span class="font-medium text-gink">hronolic</span></span>
       <?php if ($in_admin): ?>
-        <span class="ml-1 rounded-full bg-gblue-tint px-2.5 py-0.5 text-xs font-medium text-gblue">Admin</span>
+        <span class="ml-1 rounded-full bg-gblue-tint px-2.5 py-0.5 text-xs font-medium text-gblue">Manage</span>
       <?php endif; ?>
     </a>
 
@@ -87,7 +99,10 @@ tailwind.config = {
     </nav>
 
     <div class="ml-auto flex items-center gap-3">
-      <span class="hidden text-sm text-ggray md:block"><?= e($user['name']) ?></span>
+      <span class="hidden text-sm text-ggray md:block">
+        <?= e($user['name']) ?>
+        <span class="ml-1 rounded-full bg-gbg px-2 py-0.5 text-xs font-medium text-ggray"><?= e(ucfirst($user['role'])) ?></span>
+      </span>
       <span class="grid h-8 w-8 place-items-center rounded-full bg-ggreen text-sm font-medium text-white"
             title="<?= e($user['email']) ?>"><?= e(mb_strtoupper(mb_substr($user['name'], 0, 1))) ?></span>
       <a href="<?= e($base) ?>logout.php"
