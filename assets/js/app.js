@@ -21,11 +21,15 @@
     return h + ':' + m + ':' + sec;
   }
 
+  const currentBreak = document.getElementById('current-break');
+
   function tick() {
     const now = Date.now();
-    const breakMs = breakTotal + (breakStart ? Math.max(0, now - breakStart) : 0);
+    const openBreakMs = breakStart ? Math.max(0, now - breakStart) : 0;
+    const breakMs = breakTotal + openBreakMs;
     const workedMs = Math.max(0, now - startedAt - breakMs);
     timer.textContent = fmt(Math.floor(workedMs / 1000));
+    if (currentBreak) currentBreak.textContent = fmt(Math.floor(openBreakMs / 1000));
     if (breakTimer) {
       const bs = Math.floor(breakMs / 1000);
       breakTimer.textContent = Math.floor(bs / 3600) + 'h ' + String(Math.floor((bs % 3600) / 60)).padStart(2, '0') + 'm';

@@ -78,7 +78,7 @@ tailwind.config = {
 <body class="min-h-screen bg-gbg font-sans text-gink">
 
 <header class="sticky top-0 z-20 border-b border-gline bg-white">
-  <div class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
+  <div class="flex h-16 items-center gap-6 px-4 sm:px-6">
     <a href="<?= e($base) ?>dashboard.php" class="flex items-center gap-2.5 shrink-0">
       <span class="grid h-8 w-8 place-items-center rounded-full bg-gblue text-sm font-medium text-white">W</span>
       <span class="text-xl tracking-tight text-ggray">Work<span class="font-medium text-gink">hronolic</span></span>
@@ -88,16 +88,6 @@ tailwind.config = {
     </a>
 
     <?php if ($user): ?>
-    <nav class="hidden items-center gap-1 sm:flex" aria-label="Main">
-      <?php foreach ($nav as [$href, $label]): $active = $self === $href; ?>
-        <a href="<?= e($href) ?>"
-           class="rounded-full px-4 py-2 text-sm font-medium <?= $active
-              ? 'bg-gblue-tint text-gblue'
-              : 'text-ggray hover:bg-gbg hover:text-gink' ?>"
-           <?= $active ? 'aria-current="page"' : '' ?>><?= e($label) ?></a>
-      <?php endforeach; ?>
-    </nav>
-
     <div class="ml-auto flex items-center gap-3">
       <span class="hidden text-sm text-ggray md:block">
         <?= e($user['name']) ?>
@@ -112,8 +102,9 @@ tailwind.config = {
   </div>
 
   <?php if ($user): ?>
+  <!-- Mobile nav: the sidebar collapses to a scrollable pill row -->
   <nav class="flex gap-1 overflow-x-auto border-t border-gline px-2 py-1.5 sm:hidden" aria-label="Main mobile">
-    <?php foreach ($nav as [$href, $label]): $active = $self === $href; ?>
+    <?php foreach ($nav as [$href, $label]): $active = !str_contains($href, '/') && $self === $href; ?>
       <a href="<?= e($href) ?>"
          class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium <?= $active
             ? 'bg-gblue-tint text-gblue' : 'text-ggray' ?>"><?= e($label) ?></a>
@@ -122,4 +113,20 @@ tailwind.config = {
   <?php endif; ?>
 </header>
 
-<main class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+<div class="flex w-full">
+  <?php if ($user): ?>
+  <aside class="hidden w-60 shrink-0 border-r border-gline sm:block" aria-label="Sidebar">
+    <nav class="sticky top-16 flex flex-col gap-1 px-3 py-6" aria-label="Main">
+      <p class="mb-1 px-4 text-xs font-medium uppercase tracking-wide text-ggray"><?= $in_admin ? 'Manage' : 'My time' ?></p>
+      <?php foreach ($nav as [$href, $label]): $active = !str_contains($href, '/') && $self === $href; ?>
+        <a href="<?= e($href) ?>"
+           class="rounded-full px-4 py-2 text-sm font-medium <?= $active
+              ? 'bg-gblue-tint text-gblue'
+              : 'text-ggray hover:bg-white hover:text-gink' ?>"
+           <?= $active ? 'aria-current="page"' : '' ?>><?= e($label) ?></a>
+      <?php endforeach; ?>
+    </nav>
+  </aside>
+  <?php endif; ?>
+
+<main class="min-w-0 max-w-6xl flex-1 px-4 py-8 sm:px-8">
