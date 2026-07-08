@@ -36,12 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Your join request is still awaiting approval by the company. Try again once it is accepted.';
             } elseif ($found) {
                 session_regenerate_id(true); // prevent session fixation
+                // BACKEND TODO: fetch the company name with a JOIN on companies.
                 $_SESSION['user'] = [
                     'id'         => $found['id'],
                     'name'       => $found['name'],
                     'email'      => $found['email'],
                     'role'       => $found['role'],
                     'company_id' => $found['company_id'],
+                    'company'    => $DEMO_COMPANY['name'],
                 ];
                 redirect(in_array($found['role'], ['owner', 'manager'], true) ? 'admin/dashboard.php' : 'dashboard.php');
             } else {

@@ -90,7 +90,7 @@ require __DIR__ . '/includes/header.php';
 ?>
 
 <h1 class="text-2xl font-normal">Good day, <?= e(explode(' ', $user['name'])[0]) ?></h1>
-<p class="mt-1 text-sm text-ggray"><?= e(date('l, F j, Y')) ?></p>
+<p class="mt-1 text-sm text-ggray"><?= e(date('l, F j, Y')) ?><?= !empty($user['company']) ? ' · ' . e($user['company']) : '' ?></p>
 
 <?php if ($notice): ?>
   <div class="mt-6 rounded-lg bg-ggreen-tint px-4 py-3 text-sm text-ggreen" role="status"><?= e($notice) ?></div>

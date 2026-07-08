@@ -125,6 +125,12 @@ tailwind.config = {
   <?php if ($user): ?>
   <aside class="hidden w-60 shrink-0 border-r border-gline sm:block" aria-label="Sidebar">
     <div class="sticky top-16 flex h-[calc(100vh-4rem)] flex-col px-3 py-6">
+      <?php if (!empty($user['company'])): ?>
+      <div class="mb-5 border-b border-gline px-4 pb-5">
+        <p class="text-xs font-medium uppercase tracking-wide text-ggray">Company</p>
+        <p class="mt-0.5 truncate text-sm font-medium" title="<?= e($user['company']) ?>"><?= e($user['company']) ?></p>
+      </div>
+      <?php endif; ?>
       <nav class="flex flex-col gap-1" aria-label="Main">
         <p class="mb-1 px-4 text-xs font-medium uppercase tracking-wide text-ggray"><?= $in_admin ? 'Manage' : 'My time' ?></p>
         <?php foreach ($nav as [$href, $label]): $active = !str_contains($href, '/') && $self === $href; ?>
