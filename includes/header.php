@@ -10,7 +10,8 @@ $in_admin = str_contains($_SERVER['PHP_SELF'], '/admin/');
 
 // Everyone logs their own time, so every role gets the personal pages.
 // Managers and owners also get the management area; People and Company
-// settings are owner-only.
+// settings are owner-only. Company accounts switch between the two areas
+// with the workspace switch at the bottom of the sidebar.
 if ($in_admin) {
     $nav = [
         ['dashboard.php',  'Overview'],
@@ -21,17 +22,19 @@ if ($in_admin) {
         $nav[] = ['users.php',   'People'];
         $nav[] = ['company.php', 'Company'];
     }
-    $nav[] = ['../dashboard.php', 'My time'];
 } else {
     $nav = [
         ['dashboard.php', 'Dashboard'],
         ['timesheet.php', 'Timesheet'],
         ['profile.php',   'Profile'],
     ];
-    if (is_manager()) {
-        $nav[] = ['admin/dashboard.php', 'Manage'];
-    }
 }
+
+// Workspace switch targets (owner/manager only).
+$switch = is_manager() ? [
+    'personal' => $in_admin ? '../dashboard.php' : 'dashboard.php',
+    'manage'   => $in_admin ? 'dashboard.php' : 'admin/dashboard.php',
+] : null;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -109,6 +112,11 @@ tailwind.config = {
          class="whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium <?= $active
             ? 'bg-gblue-tint text-gblue' : 'text-ggray' ?>"><?= e($label) ?></a>
     <?php endforeach; ?>
+    <?php if ($switch): ?>
+      <a href="<?= e($in_admin ? $switch['personal'] : $switch['manage']) ?>"
+         class="ml-auto whitespace-nowrap rounded-full border border-gline px-4 py-1.5 text-sm font-medium text-gblue">
+        <?= $in_admin ? 'My time' : 'Manage' ?></a>
+    <?php endif; ?>
   </nav>
   <?php endif; ?>
 </header>
@@ -116,16 +124,33 @@ tailwind.config = {
 <div class="flex w-full">
   <?php if ($user): ?>
   <aside class="hidden w-60 shrink-0 border-r border-gline sm:block" aria-label="Sidebar">
-    <nav class="sticky top-16 flex flex-col gap-1 px-3 py-6" aria-label="Main">
-      <p class="mb-1 px-4 text-xs font-medium uppercase tracking-wide text-ggray"><?= $in_admin ? 'Manage' : 'My time' ?></p>
-      <?php foreach ($nav as [$href, $label]): $active = !str_contains($href, '/') && $self === $href; ?>
-        <a href="<?= e($href) ?>"
-           class="rounded-full px-4 py-2 text-sm font-medium <?= $active
-              ? 'bg-gblue-tint text-gblue'
-              : 'text-ggray hover:bg-white hover:text-gink' ?>"
-           <?= $active ? 'aria-current="page"' : '' ?>><?= e($label) ?></a>
-      <?php endforeach; ?>
-    </nav>
+    <div class="sticky top-16 flex h-[calc(100vh-4rem)] flex-col px-3 py-6">
+      <nav class="flex flex-col gap-1" aria-label="Main">
+        <p class="mb-1 px-4 text-xs font-medium uppercase tracking-wide text-ggray"><?= $in_admin ? 'Manage' : 'My time' ?></p>
+        <?php foreach ($nav as [$href, $label]): $active = !str_contains($href, '/') && $self === $href; ?>
+          <a href="<?= e($href) ?>"
+             class="rounded-full px-4 py-2 text-sm font-medium <?= $active
+                ? 'bg-gblue-tint text-gblue'
+                : 'text-ggray hover:bg-white hover:text-gink' ?>"
+             <?= $active ? 'aria-current="page"' : '' ?>><?= e($label) ?></a>
+        <?php endforeach; ?>
+      </nav>
+
+      <?php if ($switch): ?>
+      <!-- Workspace switch: company accounts flip between their own time
+           tracking and the management area. -->
+      <div class="mt-auto pt-6">
+        <div class="flex rounded-full border border-gline bg-white p-1 text-sm font-medium" role="group" aria-label="Workspace">
+          <a href="<?= e($switch['personal']) ?>"
+             class="flex-1 rounded-full px-3 py-1.5 text-center <?= !$in_admin ? 'bg-gblue-tint text-gblue' : 'text-ggray hover:text-gink' ?>"
+             <?= !$in_admin ? 'aria-current="true"' : '' ?>>My time</a>
+          <a href="<?= e($switch['manage']) ?>"
+             class="flex-1 rounded-full px-3 py-1.5 text-center <?= $in_admin ? 'bg-gblue-tint text-gblue' : 'text-ggray hover:text-gink' ?>"
+             <?= $in_admin ? 'aria-current="true"' : '' ?>>Manage</a>
+        </div>
+      </div>
+      <?php endif; ?>
+    </div>
   </aside>
   <?php endif; ?>
 
