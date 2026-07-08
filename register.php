@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/demo_data.php';
 
 if (is_logged_in()) {
     redirect(is_manager() ? 'admin/dashboard.php' : 'dashboard.php');
@@ -60,33 +59,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            if ($type === 'company' && $mode === 'create') {
-                // BACKEND TODO (transaction):
-                //   INSERT INTO companies (name, code) VALUES (?, ?)  — retry code on collision
-                //   INSERT INTO users (name, email, password_hash, role, status, company_id)
-                //   VALUES (?, ?, ?, 'owner', 'active', ?)
-                $code = generate_company_code($old['company_name']);
-                $success = [
-                    'heading' => 'Company created',
-                    'body'    => 'Your account is the owner of ' . $old['company_name'] . '. Share this code so your team can join:',
-                    'code'    => $code,
-                ];
-            } else {
-                // BACKEND TODO: look up company by code (SELECT id FROM companies WHERE code = ?).
-                // If none, error. Otherwise INSERT INTO users (..., role, status, company_id)
-                // VALUES (..., 'employee'|'manager', 'pending', ?) — a join request the
-                // company's reviewers approve. One company per account: email must be unused.
-                if ($old['company_code'] !== $DEMO_COMPANY['code']) {
-                    $errors[] = 'No company found with that code. Double-check it with your company.';
-                } else {
-                    $role = $type === 'company' ? 'manager' : 'employee';
+            $existing = db_one('SELECT id FROM users WHERE email = ? LIMIT 1', 's', [$email]);
+            if ($existing) {
+                $errors[] = 'An account already exists with that email address.';
+            }
+        }
+
+        if (!$errors) {
+            try {
+                if ($type === 'company' && $mode === 'create') {
+                    db()->begin_transaction();
+                    $code = '';
+                    for ($i = 0; $i < 5; $i++) {
+                        $candidate = generate_company_code($old['company_name']);
+                        if (!db_one('SELECT id FROM companies WHERE code = ? LIMIT 1', 's', [$candidate])) {
+                            $code = $candidate;
+                            break;
+                        }
+                    }
+                    if ($code === '') {
+                        throw new RuntimeException('Unable to generate a unique company code.');
+                    }
+
+                    db_execute('INSERT INTO companies (name, code) VALUES (?, ?)', 'ss', [$old['company_name'], $code]);
+                    $company_id = db()->insert_id;
+                    $hash = password_hash($password, PASSWORD_DEFAULT);
+                    db_execute(
+                        "INSERT INTO users (company_id, name, email, password_hash, role, status)
+                         VALUES (?, ?, ?, ?, 'owner', 'active')",
+                        'isss',
+                        [$company_id, $old['name'], $email, $hash]
+                    );
+                    db()->commit();
+
                     $success = [
-                        'heading' => 'Join request sent',
-                        'body'    => 'Your request to join ' . $DEMO_COMPANY['name'] . ' as ' .
-                                     ($role === 'manager' ? 'a manager' : 'an employee') .
-                                     ' is awaiting approval. You can sign in once it is accepted.',
-                        'code'    => null,
+                        'heading' => 'Company created',
+                        'body'    => 'Your account is the owner of ' . $old['company_name'] . '. Share this code so your team can join:',
+                        'code'    => $code,
                     ];
+                } else {
+                    $company = db_one('SELECT id, name FROM companies WHERE code = ? LIMIT 1', 's', [$old['company_code']]);
+                    if (!$company) {
+                        $errors[] = 'No company found with that code. Double-check it with your company.';
+                    } else {
+                        $role = $type === 'company' ? 'manager' : 'employee';
+                        $hash = password_hash($password, PASSWORD_DEFAULT);
+                        db_execute(
+                            "INSERT INTO users (company_id, name, email, password_hash, role, status)
+                             VALUES (?, ?, ?, ?, ?, 'pending')",
+                            'issss',
+                            [(int) $company['id'], $old['name'], $email, $hash, $role]
+                        );
+                        $success = [
+                            'heading' => 'Join request sent',
+                            'body'    => 'Your request to join ' . $company['name'] . ' as ' .
+                                         ($role === 'manager' ? 'a manager' : 'an employee') .
+                                         ' is awaiting approval. You can sign in once it is accepted.',
+                            'code'    => null,
+                        ];
+                    }
+                }
+            } catch (Throwable $e) {
+                try {
+                    db()->rollback();
+                } catch (Throwable $ignored) {
+                }
+                error_log('Registration failed: ' . $e->getMessage());
+                if (!$errors) {
+                    $errors[] = 'Registration could not be completed. Please try again.';
                 }
             }
         }
@@ -200,7 +240,7 @@ require __DIR__ . '/includes/header.php';
                    class="w-full rounded-lg border border-gline px-4 py-2.5 text-sm outline-none focus:border-gblue focus:ring-2 focus:ring-gblue/30">
           </div>
         </div>
-        <p class="mb-8 text-xs text-ggray">8+ characters, with at least one letter and one number. Demo code: <span class="font-mono"><?= e($DEMO_COMPANY['code']) ?></span></p>
+        <p class="mb-8 text-xs text-ggray">8+ characters, with at least one letter and one number. Seed company code: <span class="font-mono">AA-7K2M9Q</span></p>
 
         <div class="flex items-center justify-between">
           <a href="register.php<?= $type === 'company' ? '?type=company' : '' ?>" class="text-sm font-medium text-gblue hover:underline">Back</a>

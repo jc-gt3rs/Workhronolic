@@ -1,22 +1,23 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/demo_data.php';
 
 require_login(); // owners and managers keep personal timesheets too
 
+$user = current_user();
 $errors = [];
 $notice = '';
 
 // Editable target (only pending/rejected entries may be changed).
 $edit_id = filter_var($_GET['edit'] ?? null, FILTER_VALIDATE_INT);
-$editing = null;
-foreach ($DEMO_ENTRIES as $entry) {
-    if ($edit_id && $entry['id'] === $edit_id && in_array($entry['status'], ['pending', 'rejected'], true)) {
-        $editing = $entry;
-        break;
-    }
-}
+$editing = $edit_id ? db_one(
+    "SELECT id, work_date AS date, start_time AS start, end_time AS end, note, status
+     FROM time_entries
+     WHERE id = ? AND user_id = ? AND status IN ('pending', 'rejected')
+     LIMIT 1",
+    'ii',
+    [$edit_id, (int) $user['id']]
+) : null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) {
@@ -46,24 +47,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (!$errors) {
-                // BACKEND TODO:
-                //  - insert: INSERT INTO time_entries (user_id, work_date, start_time, end_time, note, status)
-                //            VALUES (?, ?, ?, ?, ?, 'pending')
-                //  - update: UPDATE time_entries SET ... WHERE id = ? AND user_id = ? AND status IN ('pending','rejected')
-                //    (the user_id check stops workers editing other people's rows)
+                $hours = calculate_hours($date, $start, $end);
+                if ($id) {
+                    db_execute(
+                        "UPDATE time_entries
+                         SET work_date = ?, start_time = ?, end_time = ?, break_seconds = 0,
+                             hours = ?, note = ?, status = 'pending', reviewed_by = NULL, reviewed_at = NULL
+                         WHERE id = ? AND user_id = ? AND status IN ('pending', 'rejected')",
+                        'sssdsii',
+                        [$date, $start, $end, $hours, $note, $id, (int) $user['id']]
+                    );
+                } else {
+                    db_execute(
+                        "INSERT INTO time_entries
+                            (company_id, user_id, work_date, start_time, end_time, break_seconds, hours, note, status)
+                         VALUES (?, ?, ?, ?, ?, 0, ?, ?, 'pending')",
+                        'iisssds',
+                        [(int) $user['company_id'], (int) $user['id'], $date, $start, $end, $hours, $note]
+                    );
+                }
                 $notice = $id ? 'Entry updated and resubmitted for review.' : 'Entry added and submitted for review.';
                 $editing = null;
             }
         } elseif ($action === 'delete') {
             $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
             if ($id) {
-                // BACKEND TODO: DELETE FROM time_entries
-                // WHERE id = ? AND user_id = ? AND status IN ('pending','rejected')
+                db_execute(
+                    "DELETE FROM time_entries
+                     WHERE id = ? AND user_id = ? AND status IN ('pending', 'rejected')",
+                    'ii',
+                    [$id, (int) $user['id']]
+                );
                 $notice = 'Entry deleted.';
             }
         }
     }
 }
+
+$entries = fetch_user_entries((int) $user['id']);
 
 $page_title = 'Timesheet';
 require __DIR__ . '/includes/header.php';
@@ -102,7 +123,7 @@ require __DIR__ . '/includes/header.php';
       </tr>
     </thead>
     <tbody>
-      <?php foreach ($DEMO_ENTRIES as $entry): ?>
+      <?php foreach ($entries as $entry): ?>
       <tr class="border-b border-gline align-top last:border-0 hover:bg-gbg">
         <td class="px-6 py-4 whitespace-nowrap"><?= e(date('D, M j', strtotime($entry['date']))) ?></td>
         <td class="px-6 py-4 font-mono text-xs whitespace-nowrap"><?= e($entry['start']) ?> – <?= e($entry['end'] ?? 'now') ?></td>

@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/demo_data.php';
 
 require_login(); // owners and managers log time too — no role redirect here
 
@@ -9,81 +8,99 @@ $user    = current_user();
 $errors  = [];
 $notice  = '';
 
-// DEMO: active shift lives in the session. BACKEND TODO: read/write the
-// open time_entries row (end_time IS NULL) for this user instead.
-$active_since = $_SESSION['demo_clock_in'] ?? null;
-// Breaks this shift: list of ['start' => ts, 'end' => ts|null]. The last one
-// with a null end is the running break.
-$breaks = $_SESSION['demo_breaks'] ?? [];
+$active_entry = find_open_entry((int) $user['id']);
+$break_rows = $active_entry ? fetch_entry_breaks((int) $active_entry['id']) : [];
+$active_since = $active_entry ? strtotime($active_entry['work_date'] . ' ' . $active_entry['start_time']) : null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) {
         $errors[] = 'Your session expired. Please try again.';
     } elseif (($_POST['action'] ?? '') === 'clock_in') {
-        if ($active_since) {
+        if ($active_entry) {
             $errors[] = 'You are already clocked in.';
         } else {
-            // BACKEND TODO: INSERT INTO time_entries (user_id, work_date, start_time) VALUES (?, ?, ?)
-            $_SESSION['demo_clock_in'] = time();
-            $_SESSION['demo_breaks']   = [];
-            $active_since = $_SESSION['demo_clock_in'];
-            $breaks = [];
+            $now = local_now();
+            db_execute(
+                "INSERT INTO time_entries (company_id, user_id, work_date, start_time, status)
+                 VALUES (?, ?, ?, ?, 'active')",
+                'iiss',
+                [(int) $user['company_id'], (int) $user['id'], $now->format('Y-m-d'), $now->format('H:i:s')]
+            );
             $notice = 'Clocked in. Your timer is running.';
         }
     } elseif (($_POST['action'] ?? '') === 'break_start') {
-        $open = $breaks && end($breaks)['end'] === null;
-        if (!$active_since) {
+        $active_entry = find_open_entry((int) $user['id']);
+        $break_rows = $active_entry ? fetch_entry_breaks((int) $active_entry['id']) : [];
+        $open = $break_rows && end($break_rows)['break_end'] === null;
+        if (!$active_entry) {
             $errors[] = 'You are not clocked in.';
         } elseif ($open) {
             $errors[] = 'You are already on a break.';
         } else {
-            // BACKEND TODO: INSERT INTO entry_breaks (entry_id, break_start) VALUES (?, ?)
-            $breaks[] = ['start' => time(), 'end' => null];
-            $_SESSION['demo_breaks'] = $breaks;
+            db_execute(
+                'INSERT INTO entry_breaks (entry_id, break_start) VALUES (?, ?)',
+                'is',
+                [(int) $active_entry['id'], local_now()->format('Y-m-d H:i:s')]
+            );
             $notice = 'Break started. Your timer is paused.';
         }
     } elseif (($_POST['action'] ?? '') === 'break_end') {
-        $open = $breaks && end($breaks)['end'] === null;
+        $active_entry = find_open_entry((int) $user['id']);
+        $break_rows = $active_entry ? fetch_entry_breaks((int) $active_entry['id']) : [];
+        $open = $break_rows && end($break_rows)['break_end'] === null;
         if (!$open) {
             $errors[] = 'You are not on a break.';
         } else {
-            // BACKEND TODO: UPDATE entry_breaks SET break_end = ? WHERE entry_id = ? AND break_end IS NULL
-            $breaks[array_key_last($breaks)]['end'] = time();
-            $_SESSION['demo_breaks'] = $breaks;
+            db_execute(
+                'UPDATE entry_breaks SET break_end = ? WHERE entry_id = ? AND break_end IS NULL',
+                'si',
+                [local_now()->format('Y-m-d H:i:s'), (int) $active_entry['id']]
+            );
             $notice = 'Break ended. Your timer is running again.';
         }
     } elseif (($_POST['action'] ?? '') === 'clock_out') {
         $note = clean_text($_POST['note'] ?? '');
-        $open = $breaks && end($breaks)['end'] === null;
-        if (!$active_since) {
+        $active_entry = find_open_entry((int) $user['id']);
+        $break_rows = $active_entry ? fetch_entry_breaks((int) $active_entry['id']) : [];
+        $open = $break_rows && end($break_rows)['break_end'] === null;
+        if (!$active_entry) {
             $errors[] = 'You are not clocked in.';
         } elseif ($open) {
             $errors[] = 'End your break before clocking out.';
         } elseif (!valid_justification($note)) {
             $errors[] = 'Describe what you accomplished (at least 30 characters) before clocking out.';
         } else {
-            // BACKEND TODO: UPDATE time_entries SET end_time = ?, note = ?, break_seconds = ?, status = 'pending'
-            // WHERE id = ? AND user_id = ? (prepared statement). Worked hours = (end - start - break_seconds).
-            unset($_SESSION['demo_clock_in'], $_SESSION['demo_breaks']);
-            $active_since = null;
-            $breaks = [];
+            $break_total = break_seconds($break_rows);
+            $end_time = local_now()->format('H:i:s');
+            $hours = calculate_hours($active_entry['work_date'], $active_entry['start_time'], $end_time, $break_total);
+            db_execute(
+                "UPDATE time_entries
+                 SET end_time = ?, note = ?, break_seconds = ?, hours = ?, status = 'pending'
+                 WHERE id = ? AND user_id = ? AND status = 'active'",
+                'ssidii',
+                [$end_time, $note, $break_total, $hours, (int) $active_entry['id'], (int) $user['id']]
+            );
             $notice = 'Clocked out. Your entry was submitted for review.';
         }
     }
+
+    $active_entry = find_open_entry((int) $user['id']);
+    $break_rows = $active_entry ? fetch_entry_breaks((int) $active_entry['id']) : [];
 }
 
 // Derived break state for rendering.
-$break_since = ($breaks && end($breaks)['end'] === null) ? end($breaks)['start'] : null;
-$break_total = 0; // seconds across finished breaks
-foreach ($breaks as $b) {
-    if ($b['end'] !== null) {
-        $break_total += $b['end'] - $b['start'];
-    }
-}
+$active_since = $active_entry ? strtotime($active_entry['work_date'] . ' ' . $active_entry['start_time']) : null;
+$break_since = ($break_rows && end($break_rows)['break_end'] === null) ? strtotime(end($break_rows)['break_start']) : null;
+$break_total = break_seconds(array_filter($break_rows, fn ($b) => $b['break_end'] !== null));
 
-$week_hours    = 12.0; // BACKEND TODO: SUM(hours) for current week
-$month_hours   = 16.0; // BACKEND TODO: SUM(hours) for current month
-$pending_count = 1;    // BACKEND TODO: COUNT(*) WHERE status = 'pending'
+$week_start = date('Y-m-d', strtotime('monday this week'));
+$week_end = date('Y-m-d', strtotime('sunday this week'));
+$month_start = date('Y-m-01');
+$month_end = date('Y-m-t');
+$week_hours = user_hours_between((int) $user['id'], $week_start, $week_end);
+$month_hours = user_hours_between((int) $user['id'], $month_start, $month_end);
+$pending_count = pending_entry_count((int) $user['id']);
+$recent_entries = fetch_user_entries((int) $user['id'], 4);
 
 $page_title = 'Dashboard';
 require __DIR__ . '/includes/header.php';
@@ -122,10 +139,10 @@ require __DIR__ . '/includes/header.php';
            <?= $break_since ? 'data-break-start="' . (int) $break_since . '"' : '' ?>
            class="font-mono text-6xl font-medium tabular-nums tracking-tight sm:text-7xl <?= $break_since ? 'text-ggray' : '' ?>">0:00:00</p>
 
-        <?php if ($breaks): ?>
+        <?php if ($break_rows): ?>
         <ul class="pb-1.5 font-mono text-xs tabular-nums text-ggray" aria-label="Breaks this shift">
-          <?php foreach ($breaks as $i => $b): ?>
-            <?php if ($b['end'] !== null): $secs = $b['end'] - $b['start']; ?>
+          <?php foreach ($break_rows as $i => $b): ?>
+            <?php if ($b['break_end'] !== null): $secs = strtotime($b['break_end']) - strtotime($b['break_start']); ?>
               <li>Break <?= $i + 1 ?>: <?= e(sprintf('%d:%02d:%02d', intdiv($secs, 3600), intdiv($secs % 3600, 60), $secs % 60)) ?></li>
             <?php else: ?>
               <li class="text-gyellow">Break <?= $i + 1 ?>: <span id="current-break">0:00:00</span> …</li>
@@ -221,7 +238,7 @@ require __DIR__ . '/includes/header.php';
         </tr>
       </thead>
       <tbody>
-        <?php foreach (array_slice($DEMO_ENTRIES, 0, 4) as $entry): ?>
+        <?php foreach ($recent_entries as $entry): ?>
         <tr class="border-b border-gline last:border-0 hover:bg-gbg">
           <td class="px-6 py-3.5 whitespace-nowrap"><?= e(date('D, M j', strtotime($entry['date']))) ?></td>
           <td class="px-6 py-3.5 font-mono text-xs"><?= e($entry['start']) ?> – <?= e($entry['end'] ?? 'now') ?></td>

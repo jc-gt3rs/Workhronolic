@@ -1,10 +1,11 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/demo_data.php';
 
 require_manager();
 
+$user = current_user();
+$company_id = (int) $user['company_id'];
 $errors = [];
 $notice = '';
 
@@ -15,20 +16,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id     = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
         $action = $_POST['action'] ?? '';
         if ($id && in_array($action, ['approve', 'reject'], true)) {
-            // BACKEND TODO: UPDATE time_entries SET status = ?, reviewed_by = ?, reviewed_at = NOW()
-            // WHERE id = ? AND status = 'pending' AND company_id = ? (prepared statement).
-            $notice = $action === 'approve' ? 'Entry approved.' : 'Entry rejected — the worker can revise and resubmit.';
+            $status = $action === 'approve' ? 'approved' : 'rejected';
+            db_execute(
+                'UPDATE time_entries
+                 SET status = ?, reviewed_by = ?, reviewed_at = ?
+                 WHERE id = ? AND status = ? AND company_id = ?',
+                'sisisi',
+                [$status, (int) $user['id'], local_now()->format('Y-m-d H:i:s'), $id, 'pending', $company_id]
+            );
+            $notice = $action === 'approve' ? 'Entry approved.' : 'Entry rejected - the worker can revise and resubmit.';
         } elseif ($id && in_array($action, ['join_accept', 'join_decline'], true)) {
-            // BACKEND TODO: join_accept → UPDATE users SET status = 'active'
-            // WHERE id = ? AND company_id = ?; join_decline → DELETE the pending row.
-            $notice = $action === 'join_accept'
-                ? 'Join request accepted — they can now sign in.'
-                : 'Join request declined.';
+            if ($action === 'join_accept') {
+                db_execute(
+                    "UPDATE users SET status = 'active'
+                     WHERE id = ? AND company_id = ? AND status = 'pending'",
+                    'ii',
+                    [$id, $company_id]
+                );
+                $notice = 'Join request accepted - they can now sign in.';
+            } else {
+                db_execute(
+                    "DELETE FROM users
+                     WHERE id = ? AND company_id = ? AND status = 'pending'",
+                    'ii',
+                    [$id, $company_id]
+                );
+                $notice = 'Join request declined.';
+            }
         } else {
             $errors[] = 'Invalid request.';
         }
     }
 }
+
+$join_requests = db_all(
+    "SELECT id, name, email, role, created_at AS requested
+     FROM users
+     WHERE company_id = ? AND status = 'pending'
+     ORDER BY created_at",
+    'i',
+    [$company_id]
+);
+$pending_entries = db_all(
+    "SELECT te.id, u.name AS worker, te.work_date AS date, te.start_time AS start,
+            te.end_time AS end, te.hours, te.note
+     FROM time_entries te
+     JOIN users u ON u.id = te.user_id
+     WHERE te.company_id = ? AND te.status = 'pending'
+     ORDER BY te.work_date, te.start_time",
+    'i',
+    [$company_id]
+);
 
 $base = '../';
 $page_title = 'Approvals';
@@ -50,13 +88,13 @@ require __DIR__ . '/../includes/header.php';
 <!-- Join requests -->
 <section class="mt-8" aria-labelledby="join-heading">
   <h2 id="join-heading" class="mb-3 text-base font-medium">Join requests</h2>
-  <?php if (!$DEMO_JOIN_REQUESTS): ?>
+  <?php if (!$join_requests): ?>
     <div class="rounded-2xl border border-gline bg-white p-8 text-center">
       <p class="text-sm text-ggray">No one is waiting to join. Share your company code to invite people.</p>
     </div>
   <?php else: ?>
     <div class="space-y-3">
-      <?php foreach ($DEMO_JOIN_REQUESTS as $req): ?>
+      <?php foreach ($join_requests as $req): ?>
       <article class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gline bg-white px-6 py-4">
         <div>
           <p class="font-medium"><?= e($req['name']) ?>
@@ -86,14 +124,14 @@ require __DIR__ . '/../includes/header.php';
 </section>
 
 <h2 class="mt-8 mb-3 text-base font-medium">Time entries</h2>
-<?php if (!$DEMO_PENDING): ?>
+<?php if (!$pending_entries): ?>
   <div class="mt-6 rounded-2xl border border-gline bg-white p-10 text-center">
     <p class="text-base font-medium">All caught up</p>
     <p class="mt-1 text-sm text-ggray">New clock-outs and manual entries will appear here for review.</p>
   </div>
 <?php else: ?>
   <div class="mt-6 space-y-4">
-    <?php foreach ($DEMO_PENDING as $entry): ?>
+    <?php foreach ($pending_entries as $entry): ?>
     <article class="rounded-2xl border border-gline bg-white p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div>

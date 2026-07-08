@@ -1,9 +1,10 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/demo_data.php';
 
 require_manager();
+$user = current_user();
+$company_id = (int) $user['company_id'];
 
 // Month selector (validated: YYYY-MM only, never trusted raw).
 $month = clean_text($_GET['month'] ?? date('Y-m'));
@@ -11,14 +12,14 @@ if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $month)) {
     $month = date('Y-m');
 }
 $month_label = date('F Y', strtotime($month . '-01'));
+$report_rows = monthly_report($company_id, $month);
 
-// CSV export. BACKEND TODO: build rows from the real monthly aggregate query.
 if (($_GET['export'] ?? '') === 'csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="workhronolic-' . $month . '.csv"');
     $out = fopen('php://output', 'w');
     fputcsv($out, ['Worker', 'Expected hours', 'Verified hours', 'Pending hours', 'Entries', 'Variance']);
-    foreach ($DEMO_REPORT as $row) {
+    foreach ($report_rows as $row) {
         fputcsv($out, [
             $row['worker'], $row['expected'], $row['verified'], $row['pending'],
             $row['entries'], round($row['verified'] - $row['expected'], 2),
@@ -28,8 +29,8 @@ if (($_GET['export'] ?? '') === 'csv') {
     exit;
 }
 
-$total_expected = array_sum(array_column($DEMO_REPORT, 'expected'));
-$total_verified = array_sum(array_column($DEMO_REPORT, 'verified'));
+$total_expected = array_sum(array_column($report_rows, 'expected'));
+$total_verified = array_sum(array_column($report_rows, 'verified'));
 
 $base = '../';
 $page_title = 'Monthly report';
@@ -84,7 +85,7 @@ require __DIR__ . '/../includes/header.php';
       </tr>
     </thead>
     <tbody>
-      <?php foreach ($DEMO_REPORT as $row): $v = $row['verified'] - $row['expected']; ?>
+      <?php foreach ($report_rows as $row): $v = $row['verified'] - $row['expected']; ?>
       <tr class="border-b border-gline last:border-0 hover:bg-gbg">
         <td class="px-6 py-4 font-medium whitespace-nowrap"><?= e($row['worker']) ?></td>
         <td class="px-6 py-4"><?= e(format_hours((float) $row['expected'])) ?></td>

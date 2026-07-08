@@ -1,10 +1,11 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/demo_data.php';
 
 require_owner(); // managing people is owner-only
 
+$current = current_user();
+$company_id = (int) $current['company_id'];
 $errors = [];
 $notice = '';
 
@@ -16,16 +17,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id     = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
 
         if ($action === 'promote' && $id) {
-            // BACKEND TODO: UPDATE users SET role = 'manager'
-            // WHERE id = ? AND company_id = ? AND role = 'employee' AND status = 'active'
+            db_execute(
+                "UPDATE users SET role = 'manager'
+                 WHERE id = ? AND company_id = ? AND role = 'employee' AND status = 'active'",
+                'ii',
+                [$id, $company_id]
+            );
             $notice = 'Promoted to manager.';
         } elseif ($action === 'demote' && $id) {
-            // BACKEND TODO: UPDATE users SET role = 'employee'
-            // WHERE id = ? AND company_id = ? AND role = 'manager'
+            db_execute(
+                "UPDATE users SET role = 'employee'
+                 WHERE id = ? AND company_id = ? AND role = 'manager'",
+                'ii',
+                [$id, $company_id]
+            );
             $notice = 'Changed to employee.';
         } elseif ($action === 'remove' && $id) {
-            // BACKEND TODO: soft-delete / deactivate the account
-            // (never the owner's own account) within this company only.
+            db_execute(
+                "UPDATE users SET status = 'inactive'
+                 WHERE id = ? AND company_id = ? AND role <> 'owner'",
+                'ii',
+                [$id, $company_id]
+            );
             $notice = 'Account removed from the company.';
         } elseif ($action === 'expected' && $id) {
             $hours = filter_var($_POST['expected_hours'] ?? null, FILTER_VALIDATE_INT,
@@ -33,7 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($hours === false || $hours === null) {
                 $errors[] = 'Expected hours must be a whole number between 0 and 300.';
             } else {
-                // BACKEND TODO: UPDATE users SET expected_hours = ? WHERE id = ? AND company_id = ?
+                db_execute(
+                    "UPDATE users SET expected_hours = ?
+                     WHERE id = ? AND company_id = ? AND role <> 'owner'",
+                    'iii',
+                    [$hours, $id, $company_id]
+                );
                 $notice = 'Expected monthly hours updated.';
             }
         } else {
@@ -42,6 +60,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$company = current_company();
+$users = db_all(
+    "SELECT id, name, email, role, status, expected_hours
+     FROM users
+     WHERE company_id = ? AND status <> 'inactive'
+     ORDER BY FIELD(role, 'owner', 'manager', 'employee'), status, name",
+    'i',
+    [$company_id]
+);
+
 $base = '../';
 $page_title = 'People';
 require __DIR__ . '/../includes/header.php';
@@ -49,7 +77,7 @@ require __DIR__ . '/../includes/header.php';
 
 <h1 class="text-2xl font-normal">People</h1>
 <p class="mt-1 text-sm text-ggray">
-  Manage roles and agreed monthly hours for everyone in <?= e($DEMO_COMPANY['name']) ?>.
+  Manage roles and agreed monthly hours for everyone in <?= e($company['name'] ?? 'your company') ?>.
   New people join with your company code — accept them on the
   <a href="timesheets.php" class="font-medium text-gblue hover:underline">Approvals</a> page.
 </p>
@@ -76,7 +104,7 @@ require __DIR__ . '/../includes/header.php';
       </tr>
     </thead>
     <tbody>
-      <?php foreach ($DEMO_USERS as $u): ?>
+      <?php foreach ($users as $u): ?>
       <tr class="border-b border-gline last:border-0 hover:bg-gbg">
         <td class="px-6 py-4 font-medium whitespace-nowrap"><?= e($u['name']) ?></td>
         <td class="px-6 py-4 text-ggray"><?= e($u['email']) ?></td>

@@ -1,18 +1,49 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/demo_data.php';
 
 require_manager();
 
-// BACKEND TODO: replace with aggregate queries (COUNT of pending entries,
-// SUM of month hours, active workers, who is clocked in right now).
+$user = current_user();
+$company_id = (int) $user['company_id'];
+$month_start = date('Y-m-01');
+$month_end = date('Y-m-t');
+
+$pending_row = db_one(
+    "SELECT COUNT(*) AS total FROM time_entries WHERE company_id = ? AND status = 'pending'",
+    'i',
+    [$company_id]
+);
+$month_row = db_one(
+    "SELECT COALESCE(SUM(hours), 0) AS total
+     FROM time_entries
+     WHERE company_id = ? AND status = 'approved' AND work_date BETWEEN ? AND ?",
+    'iss',
+    [$company_id, $month_start, $month_end]
+);
+$workers_row = db_one(
+    "SELECT COUNT(*) AS total
+     FROM users
+     WHERE company_id = ? AND status = 'active' AND role IN ('manager', 'employee')",
+    'i',
+    [$company_id]
+);
+$clocked_row = db_one(
+    "SELECT COUNT(*) AS total
+     FROM time_entries
+     WHERE company_id = ? AND status = 'active' AND end_time IS NULL",
+    'i',
+    [$company_id]
+);
+
 $stats = [
-    'pending'    => count($DEMO_PENDING),
-    'month'      => 142.5,
-    'workers'    => 3,
-    'clocked_in' => 1,
+    'pending'    => (int) ($pending_row['total'] ?? 0),
+    'month'      => (float) ($month_row['total'] ?? 0),
+    'workers'    => (int) ($workers_row['total'] ?? 0),
+    'clocked_in' => (int) ($clocked_row['total'] ?? 0),
 ];
+
+$report_rows = monthly_report($company_id, date('Y-m'));
 
 $base = '../';
 $page_title = 'Team overview';
@@ -58,7 +89,7 @@ require __DIR__ . '/../includes/header.php';
         </tr>
       </thead>
       <tbody>
-        <?php foreach ($DEMO_REPORT as $row):
+        <?php foreach ($report_rows as $row):
           $pct = $row['expected'] > 0 ? min(100, round($row['verified'] / $row['expected'] * 100)) : 0; ?>
         <tr class="border-b border-gline last:border-0 hover:bg-gbg">
           <td class="px-6 py-4 font-medium"><?= e($row['worker']) ?></td>

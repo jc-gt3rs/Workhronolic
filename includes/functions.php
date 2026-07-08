@@ -3,6 +3,192 @@
  * Shared helpers: output escaping, input sanitation, validation, CSRF.
  */
 
+// ---------------------------------------------------------------------------
+// Database helpers
+// ---------------------------------------------------------------------------
+
+function db(): mysqli
+{
+    global $db;
+    return $db;
+}
+
+function db_bind(mysqli_stmt $stmt, string $types, array $params): void
+{
+    if ($types === '') {
+        return;
+    }
+
+    $refs = [$types];
+    foreach ($params as $key => $value) {
+        $refs[] = &$params[$key];
+    }
+    call_user_func_array([$stmt, 'bind_param'], $refs);
+}
+
+function db_execute(string $sql, string $types = '', array $params = []): mysqli_stmt
+{
+    $stmt = db()->prepare($sql);
+    db_bind($stmt, $types, $params);
+    $stmt->execute();
+    return $stmt;
+}
+
+function db_one(string $sql, string $types = '', array $params = []): ?array
+{
+    $result = db_execute($sql, $types, $params)->get_result();
+    $row = $result->fetch_assoc();
+    return $row ?: null;
+}
+
+function db_all(string $sql, string $types = '', array $params = []): array
+{
+    $result = db_execute($sql, $types, $params)->get_result();
+    return $result->fetch_all(MYSQLI_ASSOC);
+}
+
+function session_user_from_row(array $row): array
+{
+    return [
+        'id'         => (int) $row['id'],
+        'name'       => $row['name'],
+        'email'      => $row['email'],
+        'role'       => $row['role'],
+        'company_id' => (int) $row['company_id'],
+        'company'    => $row['company_name'] ?? '',
+        'status'     => $row['status'],
+    ];
+}
+
+function current_company(): ?array
+{
+    $company_id = current_user()['company_id'] ?? null;
+    if (!$company_id) {
+        return null;
+    }
+
+    return db_one('SELECT id, name, code FROM companies WHERE id = ?', 'i', [$company_id]);
+}
+
+function local_now(): DateTimeImmutable
+{
+    return new DateTimeImmutable('now', new DateTimeZone(APP_TIMEZONE));
+}
+
+function find_open_entry(int $user_id): ?array
+{
+    return db_one(
+        "SELECT * FROM time_entries
+         WHERE user_id = ? AND status = 'active' AND end_time IS NULL
+         ORDER BY id DESC LIMIT 1",
+        'i',
+        [$user_id]
+    );
+}
+
+function fetch_entry_breaks(int $entry_id): array
+{
+    return db_all(
+        'SELECT id, break_start, break_end FROM entry_breaks WHERE entry_id = ? ORDER BY break_start',
+        'i',
+        [$entry_id]
+    );
+}
+
+function break_seconds(array $breaks, ?int $until = null): int
+{
+    $total = 0;
+    $until = $until ?? local_now()->getTimestamp();
+
+    foreach ($breaks as $break) {
+        $start = strtotime($break['break_start']);
+        $end = $break['break_end'] ? strtotime($break['break_end']) : $until;
+        if ($start !== false && $end !== false && $end > $start) {
+            $total += $end - $start;
+        }
+    }
+
+    return $total;
+}
+
+function calculate_hours(string $date, string $start, string $end, int $break_seconds = 0): float
+{
+    $start_ts = strtotime($date . ' ' . $start);
+    $end_ts = strtotime($date . ' ' . $end);
+    if ($start_ts === false || $end_ts === false || $end_ts <= $start_ts) {
+        return 0.0;
+    }
+
+    return round(max(0, $end_ts - $start_ts - $break_seconds) / 3600, 2);
+}
+
+function fetch_user_entries(int $user_id, int $limit = 0): array
+{
+    $sql = 'SELECT id, work_date AS date, start_time AS start, end_time AS end,
+                   hours, status, note
+            FROM time_entries
+            WHERE user_id = ?
+            ORDER BY work_date DESC, start_time DESC, id DESC';
+    if ($limit > 0) {
+        $sql .= ' LIMIT ' . (int) $limit;
+    }
+
+    return db_all($sql, 'i', [$user_id]);
+}
+
+function user_hours_between(int $user_id, string $start_date, string $end_date): float
+{
+    $row = db_one(
+        "SELECT COALESCE(SUM(hours), 0) AS total
+         FROM time_entries
+         WHERE user_id = ? AND status = 'approved'
+           AND work_date BETWEEN ? AND ?",
+        'iss',
+        [$user_id, $start_date, $end_date]
+    );
+
+    return (float) ($row['total'] ?? 0);
+}
+
+function pending_entry_count(int $user_id): int
+{
+    $row = db_one(
+        "SELECT COUNT(*) AS total FROM time_entries WHERE user_id = ? AND status = 'pending'",
+        'i',
+        [$user_id]
+    );
+
+    return (int) ($row['total'] ?? 0);
+}
+
+function monthly_report(int $company_id, string $month): array
+{
+    $start = $month . '-01';
+    $end = date('Y-m-t', strtotime($start));
+
+    return db_all(
+        "SELECT
+             u.id,
+             u.name AS worker,
+             u.expected_hours AS expected,
+             COALESCE(SUM(CASE WHEN te.status = 'approved' THEN te.hours ELSE 0 END), 0) AS verified,
+             COALESCE(SUM(CASE WHEN te.status = 'pending' THEN te.hours ELSE 0 END), 0) AS pending,
+             COUNT(te.id) AS entries
+         FROM users u
+         LEFT JOIN time_entries te
+           ON te.user_id = u.id
+          AND te.work_date BETWEEN ? AND ?
+          AND te.status IN ('approved', 'pending')
+         WHERE u.company_id = ?
+           AND u.status = 'active'
+           AND u.role IN ('manager', 'employee')
+         GROUP BY u.id, u.name, u.expected_hours
+         ORDER BY u.name",
+        'ssi',
+        [$start, $end, $company_id]
+    );
+}
+
 /**
  * Escape a value for safe HTML output (XSS defense).
  * Use on EVERY piece of user-supplied data that is echoed.
@@ -76,7 +262,7 @@ function valid_company_code(?string $value): bool
 
 /**
  * Generate a unique, shareable company code from the company name.
- * BACKEND TODO: retry on collision (UNIQUE index on companies.code).
+ * Callers retry on collision against the UNIQUE index on companies.code.
  */
 function generate_company_code(string $company_name): string
 {

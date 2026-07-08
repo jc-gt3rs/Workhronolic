@@ -1,13 +1,13 @@
 <?php
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/demo_data.php';
 
 require_owner();
 
 $errors  = [];
 $notice  = '';
-$company = $DEMO_COMPANY; // BACKEND TODO: SELECT * FROM companies WHERE id = {session company_id}
+$user = current_user();
+$company = current_company();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify()) {
@@ -17,16 +17,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!valid_company_name($name)) {
             $errors[] = 'Enter a company name (2–60 characters).';
         } else {
-            // BACKEND TODO: UPDATE companies SET name = ? WHERE id = ?
-            $company['name'] = $name;
+            db_execute('UPDATE companies SET name = ? WHERE id = ?', 'si', [$name, (int) $user['company_id']]);
+            $_SESSION['user']['company'] = $name;
             $notice = 'Company name updated.';
         }
     } elseif (($_POST['action'] ?? '') === 'regenerate') {
-        // BACKEND TODO: UPDATE companies SET code = ? WHERE id = ? (retry on
-        // UNIQUE collision). The old code stops working immediately.
-        $company['code'] = generate_company_code($company['name']);
-        $notice = 'New company code generated. The old code no longer works.';
+        $code = '';
+        for ($i = 0; $i < 5; $i++) {
+            $candidate = generate_company_code($company['name']);
+            if (!db_one('SELECT id FROM companies WHERE code = ? AND id <> ? LIMIT 1', 'si', [$candidate, (int) $user['company_id']])) {
+                $code = $candidate;
+                break;
+            }
+        }
+        if ($code === '') {
+            $errors[] = 'Could not generate a unique company code. Try again.';
+        } else {
+            db_execute('UPDATE companies SET code = ? WHERE id = ?', 'si', [$code, (int) $user['company_id']]);
+            $notice = 'New company code generated. The old code no longer works.';
+        }
     }
+    $company = current_company();
 }
 
 $base = '../';

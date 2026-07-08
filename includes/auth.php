@@ -9,9 +9,6 @@
  * Owners and managers also log their own time, so every role gets the
  * personal Dashboard / Timesheet / Profile pages.
  *
- * BACKEND TODO: login.php should verify credentials against the `users`
- * table (password_verify against a password_hash() value) and populate
- * $_SESSION['user'] with id, name, email, role, company_id, status.
  * Every data query must be scoped to the session's company_id.
  */
 

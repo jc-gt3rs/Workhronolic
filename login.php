@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
-require_once __DIR__ . '/includes/demo_data.php';
 
 if (is_logged_in()) {
     redirect(is_manager() ? 'admin/dashboard.php' : 'dashboard.php');
@@ -25,26 +24,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (!$errors) {
-            // BACKEND TODO: SELECT id, name, email, role, status, company_id FROM users
-            // WHERE email = ? (prepared statement), then password_verify().
-            // DEMO: any password signs in a known demo email.
-            $found = null;
-            foreach ($DEMO_USERS as $u) {
-                if ($u['email'] === $email) { $found = $u; break; }
-            }
+            $found = db_one(
+                "SELECT u.*, c.name AS company_name
+                 FROM users u
+                 JOIN companies c ON c.id = u.company_id
+                 WHERE u.email = ? AND u.status <> 'inactive'
+                 LIMIT 1",
+                's',
+                [$email]
+            );
+
             if ($found && $found['status'] === 'pending') {
                 $errors[] = 'Your join request is still awaiting approval by the company. Try again once it is accepted.';
-            } elseif ($found) {
+            } elseif ($found && password_verify($password, $found['password_hash'])) {
                 session_regenerate_id(true); // prevent session fixation
-                // BACKEND TODO: fetch the company name with a JOIN on companies.
-                $_SESSION['user'] = [
-                    'id'         => $found['id'],
-                    'name'       => $found['name'],
-                    'email'      => $found['email'],
-                    'role'       => $found['role'],
-                    'company_id' => $found['company_id'],
-                    'company'    => $DEMO_COMPANY['name'],
-                ];
+                $_SESSION['user'] = session_user_from_row($found);
                 redirect(in_array($found['role'], ['owner', 'manager'], true) ? 'admin/dashboard.php' : 'dashboard.php');
             } else {
                 $errors[] = 'Email or password is incorrect.';
@@ -85,7 +79,8 @@ require __DIR__ . '/includes/header.php';
              class="mb-2 w-full rounded-lg border border-gline px-4 py-2.5 text-sm outline-none focus:border-gblue focus:ring-2 focus:ring-gblue/30">
 
       <p class="mb-8 text-xs text-ggray">
-        Demo accounts (any password): <span class="font-mono">dathan@startup.io</span> (owner),
+        Seed accounts use password <span class="font-mono">password</span>:
+        <span class="font-mono">dathan@startup.io</span> (owner),
         <span class="font-mono">mia@startup.io</span> (manager),
         <span class="font-mono">jc@startup.io</span> (employee),
         <span class="font-mono">paolo@startup.io</span> (pending approval).

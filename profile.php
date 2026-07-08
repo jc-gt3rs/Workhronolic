@@ -21,8 +21,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'Enter a valid email address.';
         }
         if (!$errors) {
-            // BACKEND TODO: UPDATE users SET name = ?, email = ? WHERE id = ?
-            // (prepared statement; re-check email uniqueness first).
+            $existing = db_one(
+                'SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1',
+                'si',
+                [$email, (int) $user['id']]
+            );
+            if ($existing) {
+                $errors[] = 'Another account already uses that email address.';
+            }
+        }
+        if (!$errors) {
+            db_execute(
+                'UPDATE users SET name = ?, email = ? WHERE id = ?',
+                'ssi',
+                [$name, $email, (int) $user['id']]
+            );
             $_SESSION['user']['name']  = $name;
             $_SESSION['user']['email'] = $email;
             $user   = current_user();
@@ -43,9 +56,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $errors[] = 'New passwords do not match.';
         }
         if (!$errors) {
-            // BACKEND TODO: password_verify($current, stored hash), then
-            // UPDATE users SET password_hash = ? WHERE id = ?
-            $notice = 'Password changed.';
+            $row = db_one('SELECT password_hash FROM users WHERE id = ? LIMIT 1', 'i', [(int) $user['id']]);
+            if (!$row || !password_verify($current, $row['password_hash'])) {
+                $errors[] = 'Current password is incorrect.';
+            } else {
+                $hash = password_hash($new, PASSWORD_DEFAULT);
+                db_execute('UPDATE users SET password_hash = ? WHERE id = ?', 'si', [$hash, (int) $user['id']]);
+                $notice = 'Password changed.';
+            }
         }
     }
 }
