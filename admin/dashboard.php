@@ -44,6 +44,21 @@ $stats = [
 ];
 
 $report_rows = monthly_report($company_id, date('Y-m'));
+$selected_worker_id = filter_var($_GET['worker'] ?? null, FILTER_VALIDATE_INT, [
+    'options' => ['min_range' => 1],
+]);
+$selected_worker = null;
+$selected_logs = [];
+
+if ($selected_worker_id) {
+    foreach ($report_rows as $report_row) {
+        if ((int) $report_row['id'] === $selected_worker_id) {
+            $selected_worker = $report_row;
+            $selected_logs = fetch_worker_time_logs($company_id, $selected_worker_id, $month_start, $month_end);
+            break;
+        }
+    }
+}
 
 $base = '../';
 $page_title = 'Team overview';
@@ -91,8 +106,14 @@ require __DIR__ . '/../includes/header.php';
       <tbody>
         <?php foreach ($report_rows as $row):
           $pct = $row['expected'] > 0 ? min(100, round($row['verified'] / $row['expected'] * 100)) : 0; ?>
-        <tr class="border-b border-gline last:border-0 hover:bg-gbg">
-          <td class="px-6 py-4 font-medium"><?= e($row['worker']) ?></td>
+      <tr class="border-b border-gline last:border-0 hover:bg-gbg <?= $selected_worker && (int) $selected_worker['id'] === (int) $row['id'] ? 'bg-gblue-tint/40' : '' ?>">
+          <td class="px-6 py-4 font-medium">
+            <a href="dashboard.php?worker=<?= (int) $row['id'] ?>#worker-log"
+               class="text-gink hover:text-gblue hover:underline"
+               aria-current="<?= $selected_worker && (int) $selected_worker['id'] === (int) $row['id'] ? 'true' : 'false' ?>">
+              <?= e($row['worker']) ?>
+            </a>
+          </td>
           <td class="px-6 py-4"><?= e(format_hours((float) $row['expected'])) ?></td>
           <td class="px-6 py-4"><?= e(format_hours($row['verified'])) ?></td>
           <td class="px-6 py-4">
@@ -110,5 +131,83 @@ require __DIR__ . '/../includes/header.php';
     </table>
   </div>
 </section>
+
+<?php if ($selected_worker): ?>
+<section id="worker-log" class="mt-8" aria-labelledby="worker-log-heading">
+  <div class="flex flex-wrap items-end justify-between gap-3">
+    <div>
+      <h2 id="worker-log-heading" class="text-base font-medium"><?= e($selected_worker['worker']) ?>'s time log</h2>
+      <p class="mt-1 text-sm text-ggray">Clock-ins, clock-outs, and recorded breaks for <?= e(date('F Y', strtotime($month_start))) ?>.</p>
+    </div>
+    <a href="dashboard.php#month-heading" class="text-sm font-medium text-gblue hover:underline">Close log</a>
+  </div>
+
+  <div class="mt-3 overflow-x-auto rounded-2xl border border-gline bg-white">
+    <table class="w-full min-w-[860px] text-left text-sm">
+      <thead>
+        <tr class="border-b border-gline text-xs font-medium uppercase tracking-wide text-ggray">
+          <th class="px-6 py-3">Date</th>
+          <th class="px-6 py-3">Time in</th>
+          <th class="px-6 py-3">Breaks</th>
+          <th class="px-6 py-3">Time out</th>
+          <th class="px-6 py-3">Worked</th>
+          <th class="px-6 py-3">Status</th>
+          <th class="px-6 py-3">Approved at</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if ($selected_logs): ?>
+          <?php foreach ($selected_logs as $log): ?>
+          <tr class="border-b border-gline align-top last:border-0 hover:bg-gbg">
+            <td class="px-6 py-4 whitespace-nowrap"><?= e(date('D, M j', strtotime($log['date']))) ?></td>
+            <td class="px-6 py-4 font-mono text-xs whitespace-nowrap"><?= e(date('g:i A', strtotime($log['start']))) ?></td>
+            <td class="px-6 py-4">
+              <?php if ($log['breaks']): ?>
+                <ul class="space-y-1 font-mono text-xs text-ggray">
+                  <?php foreach ($log['breaks'] as $break): ?>
+                    <li><?= e(date('g:i A', strtotime($break['break_start']))) ?> – <?= $break['break_end'] ? e(date('g:i A', strtotime($break['break_end']))) : 'Ongoing' ?></li>
+                  <?php endforeach; ?>
+                </ul>
+              <?php else: ?>
+                <?php if ((int) $log['break_seconds'] > 0): ?>
+                  <span class="text-ggray"><?= e(format_hours((int) $log['break_seconds'] / 3600)) ?> recorded (times unavailable)</span>
+                <?php else: ?>
+                  <span class="text-ggray">No breaks recorded</span>
+                <?php endif; ?>
+              <?php endif; ?>
+            </td>
+            <td class="px-6 py-4 font-mono text-xs whitespace-nowrap"><?= $log['end'] ? e(date('g:i A', strtotime($log['end']))) : '<span class="text-gblue">In progress</span>' ?></td>
+            <td class="px-6 py-4 whitespace-nowrap"><?= $log['hours'] !== null ? e(format_hours((float) $log['hours'])) : '<span class="text-ggray">—</span>' ?></td>
+            <td class="px-6 py-4"><?php
+              $badges = [
+                'approved' => 'bg-ggreen-tint text-ggreen',
+                'pending'  => 'bg-gyellow-tint text-gyellow',
+                'rejected' => 'bg-gred-tint text-gred',
+                'active'   => 'bg-gblue-tint text-gblue',
+              ];
+            ?><span class="rounded-full px-2.5 py-1 text-xs font-medium <?= $badges[$log['status']] ?? '' ?>"><?= e(ucfirst($log['status'])) ?></span></td>
+            <td class="px-6 py-4 whitespace-nowrap font-mono text-xs text-ggray">
+              <?php if ($log['reviewed_at']): ?>
+                <time datetime="<?= e($log['reviewed_at']) ?>" title="<?= e(date('F j, Y \a\t g:i A', strtotime($log['reviewed_at']))) ?>">
+                  <?= e(date('M j, g:i A', strtotime($log['reviewed_at']))) ?>
+                </time>
+              <?php elseif ($log['status'] === 'pending'): ?>
+                <span class="text-gyellow">Awaiting approval</span>
+              <?php else: ?>
+                —
+              <?php endif; ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        <?php else: ?>
+          <tr>
+            <td colspan="7" class="px-6 py-10 text-center text-sm text-ggray">No time logs for this month.</td>
+          </tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+</section>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

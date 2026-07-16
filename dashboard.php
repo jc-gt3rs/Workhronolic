@@ -73,14 +73,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $break_total = break_seconds($break_rows);
             $end_time = local_now()->format('H:i:s');
             $hours = calculate_hours($active_entry['work_date'], $active_entry['start_time'], $end_time, $break_total);
-            db_execute(
-                "UPDATE time_entries
-                 SET end_time = ?, note = ?, break_seconds = ?, hours = ?, status = 'pending'
-                 WHERE id = ? AND user_id = ? AND status = 'active'",
-                'ssidii',
-                [$end_time, $note, $break_total, $hours, (int) $active_entry['id'], (int) $user['id']]
-            );
-            $notice = 'Clocked out. Your entry was submitted for review.';
+            if (is_owner()) {
+                db_execute(
+                    "UPDATE time_entries
+                     SET end_time = ?, note = ?, break_seconds = ?, hours = ?, status = 'approved',
+                         reviewed_by = ?, reviewed_at = ?
+                     WHERE id = ? AND user_id = ? AND status = 'active'",
+                    'ssidisii',
+                    [$end_time, $note, $break_total, $hours, (int) $user['id'], local_now()->format('Y-m-d H:i:s'), (int) $active_entry['id'], (int) $user['id']]
+                );
+                $notice = 'Clocked out. Your entry was approved automatically.';
+            } else {
+                db_execute(
+                    "UPDATE time_entries
+                     SET end_time = ?, note = ?, break_seconds = ?, hours = ?, status = 'pending'
+                     WHERE id = ? AND user_id = ? AND status = 'active'",
+                    'ssidii',
+                    [$end_time, $note, $break_total, $hours, (int) $active_entry['id'], (int) $user['id']]
+                );
+                $notice = 'Clocked out. Your entry was submitted for review.';
+            }
         }
     }
 
