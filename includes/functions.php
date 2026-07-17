@@ -190,6 +190,52 @@ function monthly_report(int $company_id, string $month): array
 }
 
 /**
+ * Return one worker's time-entry history for a company and date range, with
+ * each entry's break intervals grouped alongside it for display in management
+ * views.
+ */
+function fetch_worker_time_logs(int $company_id, int $user_id, string $start_date, string $end_date): array
+{
+    $entries = db_all(
+        "SELECT id, work_date AS date, start_time AS start, end_time AS end,
+                break_seconds, hours, status, reviewed_at
+         FROM time_entries
+         WHERE company_id = ? AND user_id = ?
+           AND work_date BETWEEN ? AND ?
+         ORDER BY work_date DESC, start_time DESC, id DESC",
+        'iiss',
+        [$company_id, $user_id, $start_date, $end_date]
+    );
+
+    if (!$entries) {
+        return [];
+    }
+
+    $breaks = db_all(
+        "SELECT eb.entry_id, eb.break_start, eb.break_end
+         FROM entry_breaks eb
+         JOIN time_entries te ON te.id = eb.entry_id
+         WHERE te.company_id = ? AND te.user_id = ?
+           AND te.work_date BETWEEN ? AND ?
+         ORDER BY eb.entry_id, eb.break_start",
+        'iiss',
+        [$company_id, $user_id, $start_date, $end_date]
+    );
+
+    $breaks_by_entry = [];
+    foreach ($breaks as $break) {
+        $breaks_by_entry[(int) $break['entry_id']][] = $break;
+    }
+
+    foreach ($entries as &$entry) {
+        $entry['breaks'] = $breaks_by_entry[(int) $entry['id']] ?? [];
+    }
+    unset($entry);
+
+    return $entries;
+}
+
+/**
  * Escape a value for safe HTML output (XSS defense).
  * Use on EVERY piece of user-supplied data that is echoed.
  */

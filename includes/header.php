@@ -44,15 +44,15 @@ $switch = is_manager() ? [
 <title><?= e($page_title ?? APP_NAME) ?> · <?= e(APP_NAME) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Roboto', 'system-ui', 'sans-serif'],
-        mono: ['"Roboto Mono"', 'monospace'],
+        sans: ['Manrope', 'system-ui', 'sans-serif'],
+        mono: ['"DM Mono"', 'monospace'],
       },
       colors: {
         gblue:   { DEFAULT: '#1a73e8', dark: '#1765cc', tint: '#e8f0fe' },
@@ -65,7 +65,7 @@ tailwind.config = {
         gbg:     '#f8f9fa',
       },
       boxShadow: {
-        card: '0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15)',
+        card: '0 18px 45px -28px rgba(15, 23, 42, .38), 0 8px 18px -14px rgba(15, 23, 42, .2)',
       },
     },
   },
@@ -73,6 +73,32 @@ tailwind.config = {
 </script>
 <style>
   html { -webkit-font-smoothing: antialiased; }
+  body { background-color: #f8f9fa; }
+  header { box-shadow: 0 1px 0 rgba(15, 23, 42, .04), 0 8px 22px -20px rgba(15, 23, 42, .32); }
+  aside { background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(248,250,252,.6)); }
+  h1 { font-weight: 700 !important; letter-spacing: -.035em; }
+  h2 { letter-spacing: -.018em; }
+  main .rounded-2xl.border {
+    border-color: rgba(218, 220, 224, .94);
+    box-shadow: 0 18px 42px -30px rgba(15, 23, 42, .36), 0 5px 12px -10px rgba(15, 23, 42, .14);
+  }
+  main input, main textarea, main select {
+    border-color: #dadce0 !important;
+    background-color: rgba(255, 255, 255, .9);
+    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+  }
+  main input:hover, main textarea:hover, main select:hover { border-color: #bdc1c6 !important; }
+  main input:focus, main textarea:focus, main select:focus {
+    border-color: #1a73e8 !important;
+    box-shadow: 0 0 0 4px rgba(26, 115, 232, .12) !important;
+  }
+  button, a { transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+  button[class*="bg-gblue"] { box-shadow: 0 10px 18px -12px rgba(26, 115, 232, .7); }
+  button[class*="bg-gblue"]:hover { box-shadow: 0 13px 22px -12px rgba(26, 115, 232, .62); transform: translateY(-1px); }
+  a.rounded-full[class*="bg-gblue"] { box-shadow: 0 10px 18px -12px rgba(26, 115, 232, .7); }
+  table thead { background: rgba(248, 250, 252, .72); }
+  table tbody tr { transition: background-color .16s ease; }
+  [role="alert"], [role="status"] { border: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 20%, transparent); }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
@@ -80,11 +106,11 @@ tailwind.config = {
 </head>
 <body class="min-h-screen bg-gbg font-sans text-gink">
 
-<header class="sticky top-0 z-20 border-b border-gline bg-white">
-  <div class="flex h-16 items-center gap-6 px-4 sm:px-6">
+<header class="sticky top-0 z-20 border-b border-gline bg-white/85 backdrop-blur-xl">
+  <div class="flex h-[4.5rem] items-center gap-6 px-4 sm:px-6">
     <a href="<?= e($base) ?>dashboard.php" class="flex items-center gap-2.5 shrink-0">
-      <span class="grid h-8 w-8 place-items-center rounded-full bg-gblue text-sm font-medium text-white">W</span>
-      <span class="text-xl tracking-tight text-ggray">Work<span class="font-medium text-gink">hronolic</span></span>
+      <span class="grid h-9 w-9 place-items-center rounded-xl bg-gblue text-sm font-extrabold text-white shadow-lg shadow-gblue/25">W</span>
+      <span class="text-xl font-semibold tracking-[-0.04em] text-ggray">Work<span class="font-extrabold text-gink">hronolic</span></span>
       <?php if ($in_admin): ?>
         <span class="ml-1 rounded-full bg-gblue-tint px-2.5 py-0.5 text-xs font-medium text-gblue">Manage</span>
       <?php endif; ?>
@@ -123,8 +149,8 @@ tailwind.config = {
 
 <div class="flex w-full">
   <?php if ($user): ?>
-  <aside class="hidden w-60 shrink-0 border-r border-gline sm:block" aria-label="Sidebar">
-    <div class="sticky top-16 flex h-[calc(100vh-4rem)] flex-col px-3 py-6">
+  <aside class="hidden w-64 shrink-0 border-r border-gline sm:block" aria-label="Sidebar">
+    <div class="sticky top-[4.5rem] flex h-[calc(100vh-4.5rem)] flex-col px-3 py-6">
       <?php if (!empty($user['company'])): ?>
       <div class="mb-5 border-b border-gline px-4 pb-5">
         <p class="text-xs font-medium uppercase tracking-wide text-ggray">Company</p>
@@ -160,4 +186,4 @@ tailwind.config = {
   </aside>
   <?php endif; ?>
 
-<main class="min-w-0 max-w-6xl flex-1 px-4 py-8 sm:px-8">
+<main class="min-w-0 max-w-[82rem] flex-1 px-4 py-8 sm:px-8 lg:px-10">

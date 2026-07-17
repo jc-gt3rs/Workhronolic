@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $company = current_company();
 $users = db_all(
-    "SELECT id, name, email, role, status, expected_hours
+    "SELECT id, name, email, role, status, expected_hours, created_at
      FROM users
      WHERE company_id = ? AND status <> 'inactive'
      ORDER BY FIELD(role, 'owner', 'manager', 'employee'), status, name",
@@ -97,6 +97,7 @@ require __DIR__ . '/../includes/header.php';
       <tr class="border-b border-gline text-xs font-medium uppercase tracking-wide text-ggray">
         <th class="px-6 py-3">Name</th>
         <th class="px-6 py-3">Email</th>
+        <th class="px-6 py-3">Date joined</th>
         <th class="px-6 py-3">Role</th>
         <th class="px-6 py-3">Expected hours / month</th>
         <th class="px-6 py-3">Status</th>
@@ -108,6 +109,11 @@ require __DIR__ . '/../includes/header.php';
       <tr class="border-b border-gline last:border-0 hover:bg-gbg">
         <td class="px-6 py-4 font-medium whitespace-nowrap"><?= e($u['name']) ?></td>
         <td class="px-6 py-4 text-ggray"><?= e($u['email']) ?></td>
+        <td class="px-6 py-4 whitespace-nowrap text-ggray">
+          <time datetime="<?= e($u['created_at']) ?>" title="Joined <?= e(date('F j, Y \a\t g:i A', strtotime($u['created_at']))) ?>">
+            <?= e(date('M j, Y', strtotime($u['created_at']))) ?>
+          </time>
+        </td>
         <td class="px-6 py-4"><?php
           $role_badge = [
             'owner'    => 'bg-gblue text-white',
