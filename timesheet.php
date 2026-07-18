@@ -52,7 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     db_execute(
                         "UPDATE time_entries
                          SET work_date = ?, start_time = ?, end_time = ?, break_seconds = 0,
-                             hours = ?, note = ?, status = 'pending', reviewed_by = NULL, reviewed_at = NULL
+                             hours = ?, note = ?, status = 'pending', review_comment = NULL,
+                             reviewed_by = NULL, reviewed_at = NULL
                          WHERE id = ? AND user_id = ? AND status IN ('pending', 'rejected')",
                         'sssdsii',
                         [$date, $start, $end, $hours, $note, $id, (int) $user['id']]
@@ -93,7 +94,7 @@ require __DIR__ . '/includes/header.php';
 <div class="flex flex-wrap items-end justify-between gap-4">
   <div>
     <h1 class="text-2xl font-normal">Timesheet</h1>
-    <p class="mt-1 text-sm text-ggray">Pending and rejected entries can be edited or deleted until they are reviewed.</p>
+    <p class="mt-1 text-sm text-ggray">Pending and rejected entries can be deleted if they need to be replaced.</p>
   </div>
   <a href="#entry-form" class="rounded-full bg-gblue px-6 py-2.5 text-sm font-medium text-white hover:bg-gblue-dark">
     Add manual entry
@@ -111,7 +112,7 @@ require __DIR__ . '/includes/header.php';
 
 <!-- Entries -->
 <div class="mt-6 overflow-x-auto rounded-2xl border border-gline bg-white">
-  <table class="w-full min-w-[760px] text-left text-sm">
+  <table class="w-full min-w-[980px] text-left text-sm">
     <thead>
       <tr class="border-b border-gline text-xs font-medium uppercase tracking-wide text-ggray">
         <th class="px-6 py-3">Date</th>
@@ -119,6 +120,7 @@ require __DIR__ . '/includes/header.php';
         <th class="px-6 py-3">Hours</th>
         <th class="px-6 py-3">Accomplishments</th>
         <th class="px-6 py-3">Status</th>
+        <th class="px-6 py-3">Management review</th>
         <th class="px-6 py-3"><span class="sr-only">Actions</span></th>
       </tr>
     </thead>
@@ -137,16 +139,31 @@ require __DIR__ . '/includes/header.php';
             'active'   => 'bg-gblue-tint text-gblue',
           ];
         ?><span class="rounded-full px-2.5 py-1 text-xs font-medium <?= $badges[$entry['status']] ?? '' ?>"><?= e(ucfirst($entry['status'])) ?></span></td>
+        <td class="max-w-xs px-6 py-4">
+          <?php if ($entry['reviewed_at']): ?>
+            <?php if ($entry['review_comment']): ?>
+              <p class="text-gink"><?= nl2br(e($entry['review_comment'])) ?></p>
+            <?php else: ?>
+              <p class="text-ggray">No comment provided.</p>
+            <?php endif; ?>
+            <p class="mt-1 text-xs text-ggray">
+              <?= e($entry['reviewer_name'] ?? 'Former team member') ?> ·
+              <time datetime="<?= e($entry['reviewed_at']) ?>"><?= e(date('M j, Y · g:i A', strtotime($entry['reviewed_at']))) ?></time>
+            </p>
+          <?php elseif ($entry['status'] === 'pending'): ?>
+            <span class="text-ggray">Awaiting review</span>
+          <?php else: ?>
+            <span class="text-ggray">—</span>
+          <?php endif; ?>
+        </td>
         <td class="px-6 py-4 whitespace-nowrap">
           <?php if (in_array($entry['status'], ['pending', 'rejected'], true)): ?>
-            <a href="timesheet.php?edit=<?= (int) $entry['id'] ?>#entry-form"
-               class="text-sm font-medium text-gblue hover:underline">Edit</a>
             <form method="post" action="timesheet.php" class="inline"
                   data-confirm="Delete this entry? This cannot be undone.">
               <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="<?= (int) $entry['id'] ?>">
-              <button type="submit" class="ml-3 text-sm font-medium text-gred hover:underline">Delete</button>
+              <button type="submit" class="text-sm font-medium text-gred hover:underline">Delete</button>
             </form>
           <?php endif; ?>
         </td>

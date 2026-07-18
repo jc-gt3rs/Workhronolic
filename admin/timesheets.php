@@ -16,15 +16,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id     = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT);
         $action = $_POST['action'] ?? '';
         if ($id && in_array($action, ['approve', 'reject'], true)) {
-            $status = $action === 'approve' ? 'approved' : 'rejected';
-            db_execute(
-                'UPDATE time_entries
-                 SET status = ?, reviewed_by = ?, reviewed_at = ?
-                 WHERE id = ? AND status = ? AND company_id = ?',
-                'sisisi',
-                [$status, (int) $user['id'], local_now()->format('Y-m-d H:i:s'), $id, 'pending', $company_id]
-            );
-            $notice = $action === 'approve' ? 'Entry approved.' : 'Entry rejected - the worker can revise and resubmit.';
+            $review_comment = clean_text($_POST['review_comment'] ?? '');
+            if (mb_strlen($review_comment) > 1000) {
+                $errors[] = 'Review comments cannot exceed 1,000 characters.';
+            } else {
+                $status = $action === 'approve' ? 'approved' : 'rejected';
+                db_execute(
+                    'UPDATE time_entries
+                     SET status = ?, review_comment = ?, reviewed_by = ?, reviewed_at = ?
+                     WHERE id = ? AND status = ? AND company_id = ?',
+                    'ssisisi',
+                    [$status, $review_comment !== '' ? $review_comment : null, (int) $user['id'], local_now()->format('Y-m-d H:i:s'), $id, 'pending', $company_id]
+                );
+                $notice = $action === 'approve'
+                    ? 'Entry approved. Your review is now visible to the worker.'
+                    : 'Entry rejected. Your review is now visible so the worker can revise and resubmit.';
+            }
         } elseif ($id && in_array($action, ['join_accept', 'join_decline'], true)) {
             if ($action === 'join_accept') {
                 db_execute(
@@ -133,33 +140,35 @@ require __DIR__ . '/../includes/header.php';
   <div class="mt-6 space-y-4">
     <?php foreach ($pending_entries as $entry): ?>
     <article class="rounded-2xl border border-gline bg-white p-6">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="font-medium"><?= e($entry['worker']) ?></p>
-          <p class="mt-0.5 text-sm text-ggray">
-            <?= e(date('l, M j', strtotime($entry['date']))) ?> ·
-            <span class="font-mono text-xs"><?= e($entry['start']) ?> – <?= e($entry['end']) ?></span> ·
-            <?= e(format_hours($entry['hours'])) ?>
-          </p>
-        </div>
-        <div class="flex gap-2">
-          <form method="post" action="timesheets.php" data-confirm="Reject this entry? The worker will be asked to revise it.">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="reject">
-            <input type="hidden" name="id" value="<?= (int) $entry['id'] ?>">
-            <button type="submit"
-                    class="rounded-full border border-gline px-5 py-2 text-sm font-medium text-gred hover:bg-gred-tint">Reject</button>
-          </form>
-          <form method="post" action="timesheets.php">
-            <?= csrf_field() ?>
-            <input type="hidden" name="action" value="approve">
-            <input type="hidden" name="id" value="<?= (int) $entry['id'] ?>">
-            <button type="submit"
-                    class="rounded-full bg-gblue px-5 py-2 text-sm font-medium text-white hover:bg-gblue-dark">Approve</button>
-          </form>
-        </div>
+      <div>
+        <p class="font-medium"><?= e($entry['worker']) ?></p>
+        <p class="mt-0.5 text-sm text-ggray">
+          <?= e(date('l, M j', strtotime($entry['date']))) ?> ·
+          <span class="font-mono text-xs"><?= e($entry['start']) ?> – <?= e($entry['end']) ?></span> ·
+          <?= e(format_hours($entry['hours'])) ?>
+        </p>
       </div>
       <p class="mt-4 rounded-lg bg-gbg px-4 py-3 text-sm text-gink"><?= e($entry['note']) ?></p>
+
+      <form method="post" action="timesheets.php" class="mt-5">
+        <?= csrf_field() ?>
+        <input type="hidden" name="id" value="<?= (int) $entry['id'] ?>">
+
+        <label class="mb-1.5 block text-sm font-medium" for="review-comment-<?= (int) $entry['id'] ?>">Review comment <span class="font-normal text-ggray">(optional)</span></label>
+        <textarea id="review-comment-<?= (int) $entry['id'] ?>" name="review_comment" rows="2" maxlength="1000"
+                  placeholder="Add feedback, clarification, or a note for the worker…"
+                  class="w-full rounded-lg border border-gline px-4 py-2.5 text-sm outline-none focus:border-gblue focus:ring-2 focus:ring-gblue/30"></textarea>
+        <div class="mt-2 flex flex-wrap items-center justify-between gap-3">
+          <p class="text-xs text-ggray">The worker will see this comment with the review decision.</p>
+          <div class="flex gap-2">
+            <button type="submit" name="action" value="reject"
+                    data-confirm="Reject this entry? The worker will be asked to revise it."
+                    class="rounded-full border border-gline px-5 py-2 text-sm font-medium text-gred hover:bg-gred-tint">Reject</button>
+            <button type="submit" name="action" value="approve"
+                    class="rounded-full bg-gblue px-5 py-2 text-sm font-medium text-white hover:bg-gblue-dark">Approve</button>
+          </div>
+        </div>
+      </form>
     </article>
     <?php endforeach; ?>
   </div>

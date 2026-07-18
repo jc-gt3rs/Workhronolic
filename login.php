@@ -52,8 +52,8 @@ $page_title = 'Sign in';
 require __DIR__ . '/includes/header.php';
 ?>
 
-<div class="mx-auto mt-6 max-w-md sm:mt-16">
-  <div class="rounded-2xl border border-gline bg-white p-8 sm:p-10">
+<div class="flex w-full justify-center mt-6 sm:mt-16">
+  <div class="w-full max-w-9xl rounded-2xl border border-gline bg-white p-8 sm:p-10 ">
     <div class="mb-8 flex flex-col items-center text-center">
       <span class="mb-4 grid h-12 w-12 place-items-center rounded-full bg-gblue text-lg font-medium text-white">W</span>
       <h1 class="text-2xl font-normal">Sign in</h1>

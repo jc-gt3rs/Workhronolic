@@ -48,6 +48,7 @@ CREATE TABLE time_entries (
   hours DECIMAL(6,2) NULL,
   status ENUM('active', 'pending', 'approved', 'rejected') NOT NULL DEFAULT 'pending',
   note TEXT NULL,
+  review_comment TEXT NULL,
   reviewed_by INT UNSIGNED NULL,
   reviewed_at DATETIME NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -90,19 +91,21 @@ INSERT INTO users (id, company_id, name, email, password_hash, role, status, exp
   (5, 1, 'Lea Villanueva', 'lea@freelance.ph', '$2y$10$Zx2wHkFz84m7nURX2aS4pOcSqhjY.Fit399drtgN5lb/fuiooydoi', 'manager', 'pending', 80);
 
 INSERT INTO time_entries
-  (id, company_id, user_id, work_date, start_time, end_time, break_seconds, hours, status, note, reviewed_by, reviewed_at)
+  (id, company_id, user_id, work_date, start_time, end_time, break_seconds, hours, status, note, review_comment, reviewed_by, reviewed_at)
 VALUES
   (1, 1, 3, '2026-07-03', '08:30:00', '12:30:00', 0, 4.00, 'rejected',
-   'Reviewed pull requests and updated the deployment documentation.', 2, '2026-07-04 09:00:00'),
+   'Reviewed pull requests and updated the deployment documentation.',
+   'Please add which pull requests were reviewed before resubmitting this entry.', 2, '2026-07-04 09:00:00'),
   (2, 1, 3, '2026-07-04', '10:00:00', '14:00:00', 0, 4.00, 'approved',
-   'Sprint planning with the team, then drafted the API contract for the reports endpoint.', 2, '2026-07-05 09:00:00'),
+   'Sprint planning with the team, then drafted the API contract for the reports endpoint.',
+   'Approved. The accomplishment details match the sprint deliverables.', 2, '2026-07-05 09:00:00'),
   (3, 1, 3, '2026-07-06', '09:15:00', '12:45:00', 0, 3.50, 'approved',
-   'Wrote unit tests for the invoice module and fixed two rounding bugs found along the way.', 2, '2026-07-07 09:00:00'),
+   'Wrote unit tests for the invoice module and fixed two rounding bugs found along the way.', NULL, 2, '2026-07-07 09:00:00'),
   (4, 1, 3, '2026-07-07', '13:00:00', '17:30:00', 0, 4.50, 'pending',
-   'Finished the pricing page revisions and pushed the responsive fixes for mobile breakpoints.', NULL, NULL),
+   'Finished the pricing page revisions and pushed the responsive fixes for mobile breakpoints.', NULL, NULL, NULL),
   (5, 1, 2, '2026-07-06', '10:00:00', '13:00:00', 0, 3.00, 'pending',
-   'Customer support rotation - closed 11 tickets and documented two recurring issues.', NULL, NULL),
+   'Customer support rotation - closed 11 tickets and documented two recurring issues.', NULL, NULL, NULL),
   (6, 1, 2, '2026-07-07', '09:00:00', '15:00:00', 0, 6.00, 'pending',
-   'Migrated the analytics dashboard to the new charting library and verified the weekly numbers.', NULL, NULL),
+   'Migrated the analytics dashboard to the new charting library and verified the weekly numbers.', NULL, NULL, NULL),
   (7, 1, 2, '2026-07-01', '09:00:00', '17:00:00', 3600, 7.00, 'approved',
-   'Closed out weekly operations tasks and prepared status notes for the client review.', 1, '2026-07-02 09:00:00');
+   'Closed out weekly operations tasks and prepared status notes for the client review.', NULL, 1, '2026-07-02 09:00:00');

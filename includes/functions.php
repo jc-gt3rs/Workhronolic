@@ -124,11 +124,13 @@ function calculate_hours(string $date, string $start, string $end, int $break_se
 
 function fetch_user_entries(int $user_id, int $limit = 0): array
 {
-    $sql = 'SELECT id, work_date AS date, start_time AS start, end_time AS end,
-                   hours, status, note
-            FROM time_entries
-            WHERE user_id = ?
-            ORDER BY work_date DESC, start_time DESC, id DESC';
+    $sql = 'SELECT te.id, te.work_date AS date, te.start_time AS start, te.end_time AS end,
+                   te.hours, te.status, te.note, te.review_comment, te.reviewed_at,
+                   reviewer.name AS reviewer_name
+            FROM time_entries te
+            LEFT JOIN users reviewer ON reviewer.id = te.reviewed_by
+            WHERE te.user_id = ?
+            ORDER BY te.work_date DESC, te.start_time DESC, te.id DESC';
     if ($limit > 0) {
         $sql .= ' LIMIT ' . (int) $limit;
     }

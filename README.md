@@ -16,6 +16,10 @@ Open XAMPP Manager and start:
 
 The script creates the `workhronolic` database, all tables, and seed data.
 
+If you already imported an earlier version of the database, import
+`database/add_review_comments.sql` once to add manager review comments without
+removing existing data.
+
 ## 3. Open the app
 
 When this repo is linked or copied into XAMPP's `htdocs` folder, open:

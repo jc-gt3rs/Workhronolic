@@ -147,7 +147,7 @@ tailwind.config = {
   <?php endif; ?>
 </header>
 
-<div class="flex w-full">
+<div class="flex w-full justify-center">
   <?php if ($user): ?>
   <aside class="hidden w-64 shrink-0 border-r border-gline sm:block" aria-label="Sidebar">
     <div class="sticky top-[4.5rem] flex h-[calc(100vh-4.5rem)] flex-col px-3 py-6">
@@ -186,4 +186,4 @@ tailwind.config = {
   </aside>
   <?php endif; ?>
 
-<main class="min-w-0 max-w-[82rem] flex-1 px-4 py-8 sm:px-8 lg:px-10">
+<main class="<?= $user ? 'mx-auto max-w-[82rem]' : 'w-full max-w-none' ?> min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-10">

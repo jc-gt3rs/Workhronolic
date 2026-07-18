@@ -69,10 +69,12 @@
   });
 })();
 
-// Confirm before any destructive form submit (delete / reject).
-document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+// Confirm before any destructive form submit (delete / reject). The message
+// may live on the form or on the specific submit button that was pressed.
+document.querySelectorAll('form').forEach(function (form) {
   form.addEventListener('submit', function (e) {
-    if (!window.confirm(form.dataset.confirm)) e.preventDefault();
+    const message = (e.submitter && e.submitter.dataset.confirm) || form.dataset.confirm;
+    if (message && !window.confirm(message)) e.preventDefault();
   });
 });
 
